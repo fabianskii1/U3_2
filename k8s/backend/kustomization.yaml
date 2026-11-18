@@ -7,6 +7,7 @@ resources:
   - deployment-blue.yaml
   - deployment-green.yaml
   - service.yaml
+  - ingress.yaml
 
 images:
   # Change only the inactive slot's tag when preparing a new release.
