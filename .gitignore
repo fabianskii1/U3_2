@@ -9,3 +9,4 @@ AI/.env
 data/
 __pycache__/
 *.py[cod]
+/k8s/db/db-credentials.env
