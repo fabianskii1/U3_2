@@ -10,7 +10,7 @@ spec:
   type: ClusterIP
   selector:
     app: backend
-    slot: blue
+    slot: green
   ports:
     - name: http
       port: 8000
@@ -28,7 +28,7 @@ spec:
   type: ClusterIP
   selector:
     app: backend
-    slot: green
+    slot: blue
   ports:
     - name: http
       port: 8000
