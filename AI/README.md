@@ -62,9 +62,30 @@ OpenAI에도 `store=False`로 요청한다. 응답은 완성된 텍스트 한 �
 ## 검증
 
 ```bash
-uv run ruff check app tests
-uv run pytest -q
+uv sync --frozen --group dev
+uv run --frozen --no-sync ruff check app tests
+uv run --frozen --no-sync pytest -q
 ```
 
 테스트는 외부 HTTP 응답을 대체하여 실제 모델 호출과 과금 없이 API 계약,
 대화 이력 전달, 입력 검증 및 오류 처리를 확인한다.
+
+## 이미지 CI
+
+`.github/workflows/build-ai.yaml`은 `main`의 `AI/**` 변경 또는 수동 실행 시
+위 검증을 수행하고 `linux/amd64` 이미지를 빌드한다. 실제 이미지의 기본 명령으로
+서버를 시작해 `/health`와 키가 없는 채팅 요청의 `503 MODEL_CONFIG_MISSING`을 확인한 뒤
+`harbor.skala-us.com/u3-2/ai:<커밋 SHA>`로 푸시한다. Harbor 인증에는 저장소의
+`HARBOR_USERNAME`, `HARBOR_PASSWORD` 시크릿을 사용한다. 수동 실행도 `main`에서만 동작한다.
+CI와 Dockerfile은 같은 uv `0.12.13`으로 `uv.lock`의 고정된 의존성을 설치한다.
+
+같은 이미지 검증을 로컬에서 실행할 수 있다.
+
+```bash
+docker build --platform linux/amd64 -f AI/deploy/Dockerfile -t skadi-ai-ci:local AI
+bash AI/deploy/ci-smoke.sh skadi-ai-ci:local
+```
+
+위 명령은 저장소 루트에서 실행한다. 검사 컨테이너는 네트워크와 모델 키 없이 실행하고
+종료 시 삭제한다. 호스트 `.env`는 전달하지 않으며 이미지에 `.env`가 포함돼도 검증에 실패한다.
+이미지 게시가 배포를 바꾸지는 않는다. BE의 기존 설비 조회 API 연동 불일치는 그대로 남는다.

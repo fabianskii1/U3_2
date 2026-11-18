@@ -12,6 +12,19 @@ docker compose --env-file DB/.env up -d --build
 
 FE는 `http://127.0.0.1:5173`에서 열립니다. Nginx가 같은 origin의 `/api/` 요청을 Compose의 `be:8000`으로 전달합니다. `DB/.env`의 `FE_PORT`로 호스트 포트를 변경할 수 있습니다. Docker 빌드는 `VITE_API_MODE=remote`, `VITE_API_BASE_URL=/api`를 사용합니다.
 
+이미지의 `BACKEND_UPSTREAM` 기본값은 EKS Service 이름에 맞춘 `backend:8000`입니다. Nginx 공식 이미지의 시작 템플릿으로 이 값을 적용하며, Compose는 `BACKEND_UPSTREAM=be:8000`을 설정합니다. `/api/` 경로와 쿼리 문자열을 그대로 전달하고 스트리밍 프록시 버퍼링은 끕니다.
+
+## 이미지 CI
+
+`.github/workflows/build-fe.yaml`은 `main`의 `fe/**` 변경 또는 `main`에서의 수동 실행에 동작합니다. Node.js 22에서 `npm ci`, Mock 모드의 전체 Vitest, 프로덕션 빌드를 통과한 뒤 `linux/amd64` 이미지를 만들고 실제 Nginx 컨테이너에서 정적 자산, SPA 새로고침, API 프록시와 upstream 설정 변경을 검사합니다. 검사가 모두 성공해야 기존 `HARBOR_USERNAME`/`HARBOR_PASSWORD`로 `harbor.skala-us.com/u3-2/frontend:<commit SHA>`를 게시합니다. 배포 중인 이미지 태그는 자동으로 변경하지 않습니다.
+
+동일한 이미지 검사를 로컬에서 실행하려면 프로젝트 루트에서 다음을 실행합니다. 테스트용 API는 같은 이미지의 Nginx로 만들고, 외부 연결이 없는 임시 Docker 네트워크와 컨테이너는 종료 시 삭제합니다.
+
+```bash
+docker buildx build --platform linux/amd64 --load -t skadi-fe-ci:local -f fe/deploy/Dockerfile fe
+bash fe/deploy/ci-smoke.sh skadi-fe-ci:local
+```
+
 현재 BE에서 연결되는 화면은 계층·설비 상세·트렌드·알람 이력·보고서 목록/상세와 설비 ID 조회 채팅입니다. 울산CLX 플랜트, CUD-01 그룹, 펌프 6대와 센서 48개가 기준 데이터로 들어 있습니다. 알람·보고서는 데이터가 없으면 빈 목록으로 표시됩니다. 실시간 활성 알람, 알람 SSE, 보고서 작성·편집 및 채팅의 보고서 작업은 준비 중입니다.
 
 ## 실행
@@ -19,7 +32,7 @@ FE는 `http://127.0.0.1:5173`에서 열립니다. Nginx가 같은 origin의 `/ap
 Node.js 22.12 이상 또는 이에 대응하는 최신 LTS와 npm을 사용합니다. 검증 환경은 Node.js 26입니다.
 
 ```bash
-cd FE
+cd fe
 npm ci
 npm run dev
 ```
