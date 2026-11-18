@@ -1,0 +1,4 @@
+FROM timescale/timescaledb:2.32.0-pg17
+
+# The base image initializes TimescaleDB first. Enable pgvector in the app DB.
+COPY initdb/010_enable_vector.sql /docker-entrypoint-initdb.d/010_enable_vector.sql

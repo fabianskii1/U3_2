@@ -1,0 +1,81 @@
+services:
+  db:
+    build:
+      context: ./DB/docker
+      dockerfile: Dockerfile.db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-skadi}
+      POSTGRES_USER: ${POSTGRES_USER:-skadi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in DB/.env}
+      TIMESCALEDB_TELEMETRY: "off"
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: ./BE
+      dockerfile: deploy/Dockerfile
+    environment: &be_environment
+      POSTGRES_DB: ${POSTGRES_DB:-skadi}
+      POSTGRES_USER: ${POSTGRES_USER:-skadi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in DB/.env}
+      DB_HOST: db
+      DB_PORT: 5432
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  be:
+    build:
+      context: ./BE
+      dockerfile: deploy/Dockerfile
+    environment:
+      <<: *be_environment
+      AI_BASE_URL: http://ai:8001
+    ports:
+      - "127.0.0.1:${BE_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      ai:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ai:
+    build:
+      context: ./AI
+      dockerfile: deploy/Dockerfile
+    env_file:
+      - ./AI/.env
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  fe:
+    build:
+      context: ./FE
+      dockerfile: deploy/Dockerfile
+      args:
+        VITE_API_MODE: remote
+    ports:
+      - "127.0.0.1:${FE_PORT:-5173}:80"
+    depends_on:
+      be:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
