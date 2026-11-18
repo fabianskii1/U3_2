@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: u3-2
+
+resources:
+  - deployment-blue.yaml
+  - deployment-green.yaml
+  - service.yaml
+
+images:
+  # Change only the inactive slot's tag when preparing a new release.
+  - name: backend-blue-image
+    newName: harbor.skala-us.com/u3-2/backend
+    newTag: "5170e7ed199fb4eabe04e0ebcc1bc43dac7fff52"
+  - name: backend-green-image
+    newName: harbor.skala-us.com/u3-2/backend
+    newTag: "5170e7ed199fb4eabe04e0ebcc1bc43dac7fff52"
