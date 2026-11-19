@@ -1,13 +1,13 @@
 # AI 서버 첫 배포와 수동 Blue-Green
 
-이 디렉터리의 고정 태그는 통합 전 일반 채팅 이미지다. 새 설비 조회 소스의 첫 배포에는
-[상위 배포 안내](../README.md)에 따라 새 main CI 이미지 태그를 사용한다. 아래 버전과 초기 연결은 복구된 설정의 상태를 설명한다.
+이번 최초 배포는 main CI가 검증·업로드한 설비 조회 이미지 `056c253`을 사용한다.
+DB와 BE·FE 반영 순서는 [상위 배포 안내](../README.md)를 따른다.
 
 Deployment 두 개와 내부 Service 두 개로 구성한다. Argo Rollouts나 추가 CRD는 사용하지 않는다.
 초기 운영은 Blue이며, 두 slot 모두 CI에서 빌드·검증·업로드한 아래 이미지를 사용한다.
 
 ```text
-harbor.skala-us.com/u3-2/ai:67117a2d12d688e030080e4c20e965bcad85eb36
+harbor.skala-us.com/u3-2/ai:056c253625e73639604ab088ca475cfa675f61d7
 
 BE → ai:8001         → ai-blue  (초기 운영)
      ai-preview:8001 → ai-green (초기 검증)
@@ -15,8 +15,7 @@ BE → ai:8001         → ai-blue  (초기 운영)
 
 AI는 ClusterIP Service로만 접근한다. 별도 AI Ingress는 만들지 않는다.
 팀 호스트의 `/api`, `/health`, `/` 경로는 BE·FE 배포에서 관리한다.
-BE의 내부 호출 주소는 `http://ai:8001`이다. 현재 통합 소스는 설비 조회 API를 사용하지만,
-이전에 고정된 이미지는 일반 채팅 API이므로 버전을 맞춰 배포해야 한다.
+BE의 내부 호출 주소는 `http://ai:8001`이다. 새 BE 후보도 같은 릴리스의 이미지로 검증한다.
 
 ## 구성
 

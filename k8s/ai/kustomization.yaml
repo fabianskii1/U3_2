@@ -13,7 +13,7 @@ images:
   - name: ai-blue-image
     newName: harbor.skala-us.com/u3-2/ai
     # Published by the AI CI workflow; both slots start with this version.
-    newTag: "67117a2d12d688e030080e4c20e965bcad85eb36"
+    newTag: "056c253625e73639604ab088ca475cfa675f61d7"
   - name: ai-green-image
     newName: harbor.skala-us.com/u3-2/ai
-    newTag: "67117a2d12d688e030080e4c20e965bcad85eb36"
+    newTag: "056c253625e73639604ab088ca475cfa675f61d7"

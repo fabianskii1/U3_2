@@ -1,9 +1,8 @@
 # FE 배포 설정
 
-아래 고정 태그는 통합 전 확인된 이미지다. 새 기능 코드를 배포할 때는 [상위 배포 안내](../README.md)에 따라
-main CI가 게시한 새 태그로 변경한다.
+이번 배포는 새 BE 검증·운영 전환 이후에 진행한다. 전체 순서는 [상위 배포 안내](../README.md)를 따른다.
 
-성공한 CI 이미지 `harbor.skala-us.com/u3-2/frontend:33e74a2bfb9294d4467bd4802cf2ade741a7dba0`를
+성공한 CI 이미지 `harbor.skala-us.com/u3-2/frontend:056c253625e73639604ab088ca475cfa675f61d7`를
 Deployment 1개와 내부 Service `frontend:80`으로 배포한다. 새 이미지 빌드나 CI 변경은 필요하지 않다.
 개별 YAML 대신 Kustomize 디렉터리를 사용한다.
 

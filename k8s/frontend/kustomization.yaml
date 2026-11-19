@@ -11,4 +11,4 @@ resources:
 images:
   - name: frontend-image
     newName: harbor.skala-us.com/u3-2/frontend
-    newTag: "33e74a2bfb9294d4467bd4802cf2ade741a7dba0"
+    newTag: "056c253625e73639604ab088ca475cfa675f61d7"
