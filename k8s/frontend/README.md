@@ -1,6 +1,6 @@
 # FE 배포 설정
 
-이번 배포는 새 BE 검증·운영 전환 이후에 진행한다. 전체 순서는 [상위 배포 안내](../README.md)를 따른다.
+이번 배포는 AI와 새 BE의 Rolling 반영·검증 이후에 진행한다. 전체 순서는 [상위 배포 안내](../README.md)를 따른다.
 
 성공한 CI 이미지 `harbor.skala-us.com/u3-2/frontend:056c253625e73639604ab088ca475cfa675f61d7`를
 Deployment 1개와 내부 Service `frontend:80`으로 배포한다. 새 이미지 빌드나 CI 변경은 필요하지 않다.

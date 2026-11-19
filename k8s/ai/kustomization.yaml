@@ -9,10 +9,10 @@ resources:
   - service.yaml
 
 images:
-  # Independent aliases keep candidate image changes away from the active slot.
+  # Development updates Blue; Green remains scaled to zero.
   - name: ai-blue-image
     newName: harbor.skala-us.com/u3-2/ai
-    # Published by the AI CI workflow; both slots start with this version.
+    # Published by the AI CI workflow; both image aliases pin this version.
     newTag: "056c253625e73639604ab088ca475cfa675f61d7"
   - name: ai-green-image
     newName: harbor.skala-us.com/u3-2/ai

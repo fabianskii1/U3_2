@@ -25,8 +25,8 @@ kubectl --context u3-2 -n u3-2 create -f k8s/migrations/backend-056c253.yaml
 kubectl --context u3-2 -n u3-2 logs job/backend-migrate-056c253
 ```
 
-DB 확인 후 AI를 먼저 기동하고 BE Blue를 후보 버전으로 검증한다. 운영 Green의 태그·Service selector는
-검증이 끝날 때까지 유지한다. 운영 전환은 별도 커밋·Sync로 수행하고 FE는 그 뒤에 검증한다.
+DB 확인 후 AI Blue를 먼저 기동하고 BE Green을 Rolling으로 갱신·검증한다. Service selector는 유지하고
+FE는 그 뒤에 검증한다. 개발 중 비활성 BE Blue·AI Green은 0개로 두며 기존 정의는 보존한다.
 AI 키 등록은 보류한다. 키 없는 기동·확정 별칭 조회와 모델 호출 검증을 구분한다.
 
 ## 2026-11-19 실행 기록

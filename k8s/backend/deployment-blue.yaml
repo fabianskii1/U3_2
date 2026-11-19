@@ -7,7 +7,8 @@ metadata:
     app: backend
     slot: blue
 spec:
-  replicas: 1
+  # Reserved for a later Blue-Green release; development uses Green.
+  replicas: 0
   minReadySeconds: 5
   revisionHistoryLimit: 2
   strategy:

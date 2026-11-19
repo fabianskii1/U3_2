@@ -10,8 +10,10 @@ spec:
   minReadySeconds: 5
   revisionHistoryLimit: 2
   strategy:
-    # Update this slot only while the active Service points to the other slot.
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: ai
