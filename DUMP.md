@@ -10,10 +10,11 @@ DB 컨테이너를 시작한다.
 docker compose --env-file DB/.env up -d db
 ```
 
-날짜와 시간이 붙은 전체 DB 덤프를 `DB/`에 저장한다. `-T`는 덤프의 바이너리 출력이 터미널에 의해 변형되지 않게 한다. 실행 중인 DB에서도 `pg_dump`는 일관된 스냅샷을 만든다.
+날짜와 시간이 붙은 전체 DB 덤프를 `DB/dump/`에 저장한다. `-T`는 덤프의 바이너리 출력이 터미널에 의해 변형되지 않게 한다. 실행 중인 DB에서도 `pg_dump`는 일관된 스냅샷을 만든다.
 
 ```bash
-dump_file="DB/cdu-$(date +%Y%m%d-%H%M%S).dump"
+mkdir -p DB/dump
+dump_file="DB/dump/skadi_$(date +%Y%m%d-%H%M%S).dump"
 docker compose --env-file DB/.env exec -T db \
   sh -c 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
   > "$dump_file"
@@ -26,7 +27,7 @@ docker compose --env-file DB/.env exec -T db pg_restore --file=/dev/null < "$dum
 ls -lh "$dump_file"
 ```
 
-기존 `DB/cdu.dump`를 갱신하려면 위 백업 명령의 출력 경로를 `DB/cdu.dump`로 바꾸면 된다. 이 경우 기존 파일이 즉시 덮어써지므로, 새 덤프와 검사가 끝난 뒤 교체하는 편이 안전하다. `DB/*.dump`는 `.gitignore`에 등록되어 Git에 올라가지 않는다.
+기존 덤프 파일을 같은 이름으로 다시 만들면 즉시 덮어써진다. 새 파일로 백업하고 검사가 끝난 뒤 필요한 파일을 교체한다. `DB/dump/*.dump`는 `.gitignore`에 등록되어 Git에 올라가지 않는다.
 
 TimescaleDB 내부 테이블(`continuous_agg` 등)의 순환 외래 키 경고가 나올 수 있다. 위 명령은 `--data-only`가 아닌 전체 DB 덤프다. 경고 자체는 백업 실패를 뜻하지 않지만, 명령 종료 상태와 덤프 검사는 확인한다.
 
@@ -34,9 +35,13 @@ TimescaleDB 내부 테이블(`continuous_agg` 등)의 순환 외래 키 경고�
 
 복원은 **비어 있는 DB**에 한다. 현재 데이터가 들어 있는 `skadi`에 그대로 `pg_restore`를 실행하지 않는다. 먼저 같은 Docker 이미지에서 별도의 `skadi_restore` DB를 만들어 복원하고 결과를 확인한다. TimescaleDB와 PostgreSQL 버전은 덤프를 만든 환경과 맞춘다.
 
-아래 명령은 현재 `DB/cdu.dump`를 사용한다. 다른 덤프를 복원하려면 마지막 복원 명령의 입력 파일만 바꾼다. `skadi_restore`가 이미 있다면 새 이름을 정해 아래 명령 전체에서 일관되게 바꾼다.
+`DB/dump/`에서 적용할 `.dump` 파일을 선택한다. 아래 예시는 `skadi_20261119_add_trend_view.dump`를 사용한다. 다른 파일을 적용하려면 `dump_file` 값만 바꾼다. `skadi_restore`가 이미 있다면 새 이름을 정해 아래 명령 전체에서 일관되게 바꾼다.
 
 ```bash
+ls -lh DB/dump/*.dump
+dump_file="DB/dump/skadi_20261119_add_trend_view.dump"
+test -f "$dump_file" || { echo "덤프 파일이 없습니다: $dump_file" >&2; exit 1; }
+
 docker compose --env-file DB/.env up -d db
 
 docker compose --env-file DB/.env exec -T db \
@@ -50,7 +55,7 @@ docker compose --env-file DB/.env exec -T db \
 
 docker compose --env-file DB/.env exec -T db \
   sh -c 'exec pg_restore --exit-on-error --no-owner --no-acl -U "$POSTGRES_USER" -d skadi_restore' \
-  < DB/cdu.dump
+  < "$dump_file"
 
 docker compose --env-file DB/.env exec -T db \
   sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d skadi_restore -c "SELECT timescaledb_post_restore();"'
