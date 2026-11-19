@@ -57,16 +57,14 @@ describe("BE 응답 변환", () => {
     expect(hierarchy.equipment[0].tags[0].limit).toBeUndefined();
   });
 
-  it("알람의 5단계와 발생 당시 측정값·임계값을 보존한다", () => {
+  it("알람의 5단계와 발생 시각을 보존한다", () => {
     const alarm = mapAlarm(
       {
         alarm_id: "50",
         equipment_id: "30",
         sensor_id: "40",
         alarm_type: "Setpoint",
-        occurred_at: "2026-11-11T00:00:00Z",
-        measured_value: 5.1,
-        threshold_value: 4.5,
+        alarm_start_time: "2026-11-11T00:00:00Z",
         unit: "mm/s RMS",
         alarm_level: 4,
         user_message: "비상",
@@ -76,8 +74,6 @@ describe("BE 응답 변환", () => {
     expect(alarm).toMatchObject({
       id: "50",
       alarmLevel: 4,
-      value: 5.1,
-      limit: 4.5,
       signal: "vibration",
     });
   });

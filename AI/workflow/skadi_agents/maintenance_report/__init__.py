@@ -16,15 +16,9 @@ def build_maintenance_draft(
     observation = "연결된 알람 관측값 없음. 현장 관측 내용을 입력해 주세요."
     if alarm and alarm.get("equipment_id") == evidence.equipment_id:
         alarm_id = markdown_text(alarm["alarm_id"])
-        occurred_at = markdown_text(alarm["occurred_at"])
+        alarm_start_time = markdown_text(alarm["alarm_start_time"])
         sensor_id = markdown_text(alarm["sensor_id"])
-        measured = markdown_text(alarm["measured_value"])
-        threshold = markdown_text(alarm["threshold_value"])
-        unit = markdown_text(alarm["unit"])
-        observation = (
-            f"알람 {alarm_id} · {occurred_at} · 센서 {sensor_id} · "
-            f"발생 당시 관측값 {measured} {unit} · 기준값 {threshold} {unit}"
-        )
+        observation = f"알람 {alarm_id} · {alarm_start_time} · 센서 {sensor_id}"
         if alarm.get("cof_score") is not None:
             observation += f" · CoF {markdown_text(alarm['cof_score'])}"
     sections = [

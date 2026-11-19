@@ -88,15 +88,13 @@ async def test_read_contract_with_uncommitted_sample_rows():
                 )
             )
             occurred_at = datetime(2026, 11, 16, tzinfo=UTC)
-            for value in (5.1, 5.2):
+            for _ in range(2):
                 await connection.execute(
                     insert(m.alarm).values(
                         equipment_id=equipment_id,
                         sensor_id=sensor_id,
                         alarm_type="Setpoint",
-                        occurred_at=occurred_at,
-                        measured_value=value,
-                        threshold_value=4.5,
+                        alarm_start_time=occurred_at,
                         unit="mm/s",
                         alarm_level=3,
                         user_message="진동 위험",

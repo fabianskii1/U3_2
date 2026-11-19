@@ -79,12 +79,10 @@ async def test_monitor_intake_replays_snapshot_and_closes_alarm(monkeypatch):
             "source_event_id": "intake-test-start",
             "equipment_id": equipment_id,
             "sensor_id": sensor_id,
-            "occurred_at": occurred_at.isoformat(),
+            "alarm_start_time": occurred_at.isoformat(),
             "is_active": True,
             "alarm_level": 2,
             "cof_score": 55,
-            "measured_value": 5.5,
-            "threshold_value": 4.5,
             "unit": "mm/s",
             "user_message": "진동 기준 초과",
         }
@@ -121,7 +119,7 @@ async def test_monitor_intake_replays_snapshot_and_closes_alarm(monkeypatch):
 
                 replay = await client.post(path, json=event, headers=headers)
                 assert replay.status_code == 200 and replay.json() == body
-                changed = {**event, "measured_value": 6.1}
+                changed = {**event, "user_message": "수정된 알람"}
                 assert (await client.post(path, json=changed, headers=headers)).status_code == 409
                 snapshot = (
                     await client.get("/api/alarms/priorities", params={"plant_id": plant_id})
@@ -133,7 +131,7 @@ async def test_monitor_intake_replays_snapshot_and_closes_alarm(monkeypatch):
                     "source_event_id": "intake-test-close",
                     "closes_source_event_id": event["source_event_id"],
                     "is_active": False,
-                    "occurred_at": (occurred_at + timedelta(minutes=30)).isoformat(),
+                    "alarm_start_time": (occurred_at + timedelta(minutes=30)).isoformat(),
                 }
                 clearing = await client.post(path, json=closed, headers=headers)
                 assert clearing.status_code == 201, clearing.text

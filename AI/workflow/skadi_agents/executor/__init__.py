@@ -399,7 +399,7 @@ async def _priority_reply(
     for item in items:
         alarm_entity = Entity("equipment", item["equipment_id"], item["equipment_name"])
         occurred = (
-            datetime.fromisoformat(item["occurred_at"])
+            datetime.fromisoformat(item["alarm_start_time"])
             .astimezone(KST)
             .strftime("%m월 %d일 %H:%M KST")
         )
@@ -407,8 +407,7 @@ async def _priority_reply(
         lines.append(
             f"{item['rank']}. **{markdown_text(item['equipment_name'])} · {markdown_text(item['sensor_name'])}**"
             f" · CoF **{item['cof_score']:g}** · {occurred} 발생"
-            f" · 실측 {item['measured_value']:g} {markdown_text(item['unit'])}"
-            f" / 기준 {item['threshold_value']:g} {markdown_text(item['unit'])}{reason}"
+            f"{reason}"
         )
         links.append(
             _link(

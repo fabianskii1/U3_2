@@ -56,9 +56,9 @@ async def alarm_history(
     if sensor_id is not None:
         stmt = stmt.where(alarms_models.alarm.c.sensor_id == sensor_id)
     if from_time:
-        stmt = stmt.where(alarms_models.alarm.c.occurred_at >= from_time)
+        stmt = stmt.where(alarms_models.alarm.c.alarm_start_time >= from_time)
     if to_time:
-        stmt = stmt.where(alarms_models.alarm.c.occurred_at < to_time)
+        stmt = stmt.where(alarms_models.alarm.c.alarm_start_time < to_time)
     return await page(
-        db, stmt, alarms_models.alarm.c.alarm_id, alarms_models.alarm.c.occurred_at, limit, cursor
+        db, stmt, alarms_models.alarm.c.alarm_id, alarms_models.alarm.c.alarm_start_time, limit, cursor
     )

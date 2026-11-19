@@ -1,3 +1,4 @@
+import type { CellContext } from "@tanstack/react-table";
 import { Link } from "react-router";
 import type { Alarm } from "../api/alarms.schema.ts";
 import type { Equipment } from "../../../shared/api/contracts/hierarchy.ts";
@@ -41,18 +42,22 @@ export function AlarmTable({
           ),
         },
         { accessorKey: "tagId", header: "태그" },
-        {
-          accessorKey: "value",
-          header: "실측 / 기준",
-          cell: ({ row }) => (
-            <span className="mono">
-              {row.original.value.toFixed(2)}{" "}
-              <span className="muted">
-                / {row.original.limit} {row.original.unit}
-              </span>
-            </span>
-          ),
-        },
+        ...(alarms.some((alarm) => alarm.value !== undefined && alarm.limit !== undefined)
+          ? [
+              {
+                accessorKey: "value",
+                header: "실측 / 기준",
+                cell: ({ row }: CellContext<Alarm, unknown>) => (
+                  <span className="mono">
+                    {row.original.value?.toFixed(2)}{" "}
+                    <span className="muted">
+                      / {row.original.limit} {row.original.unit}
+                    </span>
+                  </span>
+                ),
+              },
+            ]
+          : []),
         {
           accessorKey: "occurredAt",
           header: "발생 시각",

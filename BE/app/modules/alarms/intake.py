@@ -47,18 +47,16 @@ class AlarmEvent(BaseModel):
     source_event_id: SourceEventId
     equipment_id: Code
     sensor_id: Code
-    occurred_at: AwareDatetime
+    alarm_start_time: AwareDatetime
     alarm_type: Literal["Setpoint"] = "Setpoint"
     is_active: StrictBool
     alarm_level: int = Field(strict=True, ge=0, le=4)
-    measured_value: Measurement
-    threshold_value: Measurement
     unit: Code
     user_message: str = Field(min_length=1, max_length=2000)
     cof_score: Measurement | None = None
     closes_source_event_id: SourceEventId | None = None
 
-    @field_validator("occurred_at")
+    @field_validator("alarm_start_time")
     @classmethod
     def normalize_time(cls, value: datetime) -> datetime:
         if value.year < 2 or value > datetime.now(UTC):
@@ -124,7 +122,7 @@ async def _close_alarm(db: AsyncSession, event: AlarmEvent) -> str | None:
                 alarm.c.equipment_id == event.equipment_id,
                 alarm.c.sensor_id == event.sensor_id,
                 alarm.c.is_active.is_(True),
-                alarm.c.occurred_at <= event.occurred_at,
+                alarm.c.alarm_start_time <= event.alarm_start_time,
             )
             .values(is_active=False)
             .returning(alarm.c.alarm_id)
@@ -138,7 +136,7 @@ async def _close_alarm(db: AsyncSession, event: AlarmEvent) -> str | None:
 async def _recent_trend(
     db: AsyncSession, selected: dict, entity: Entity
 ) -> tuple[dict, dict[str, str] | None]:
-    stop = datetime.fromisoformat(selected["occurred_at"]).replace(microsecond=0)
+    stop = datetime.fromisoformat(selected["alarm_start_time"]).replace(microsecond=0)
     start = stop - timedelta(days=7) if stop.year >= 2 else stop
     summary = {
         "status": "empty",

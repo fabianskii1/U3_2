@@ -53,9 +53,7 @@ const alarm = z.object({
   equipment_id: id,
   sensor_id: id,
   alarm_type: z.string(),
-  occurred_at: z.string(),
-  measured_value: z.number(),
-  threshold_value: z.number(),
+  alarm_start_time: z.string(),
   unit: z.string(),
   alarm_level: z.number().int().min(0).max(4),
   user_message: z.string(),
@@ -147,10 +145,8 @@ export function mapAlarm(data: unknown, sensors: Hierarchy): Alarm {
     severity:
       raw.alarm_level >= 3 ? "High" : raw.alarm_level === 2 ? "Medium" : "Low",
     alarmLevel: raw.alarm_level,
-    value: raw.measured_value,
-    limit: raw.threshold_value,
     unit: raw.unit,
-    occurredAt: raw.occurred_at,
+    occurredAt: raw.alarm_start_time,
     type: raw.alarm_type,
     reason: raw.user_message,
   };

@@ -39,9 +39,7 @@ def test_maintenance_draft_includes_only_same_equipment_alarm_observations():
         "alarm_id": "3",
         "equipment_id": "P2",
         "sensor_id": "10-VT-1205",
-        "occurred_at": "2026-11-18T00:00:00+00:00",
-        "measured_value": 7.1,
-        "threshold_value": 4.5,
+        "alarm_start_time": "2026-11-18T00:00:00+00:00",
         "unit": "mm/s",
         "cof_score": 0,
     }
@@ -51,7 +49,7 @@ def test_maintenance_draft_includes_only_same_equipment_alarm_observations():
         "나프타 제품 이송 펌프", evidence, alarm={**alarm, "equipment_id": "P3"}
     )
 
-    assert "발생 당시 관측값 7.1 mm/s · 기준값 4.5 mm/s · CoF 0" in matching
+    assert "센서 10-VT-1205 · CoF 0" in matching
     assert "원인 · 확인 대기" in matching
     assert "연결된 알람 관측값 없음" in foreign
-    assert "7.1" not in foreign
+    assert "CoF 0" not in foreign

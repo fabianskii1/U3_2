@@ -33,7 +33,7 @@ async def get_alarm_priorities(
                 equipment.c.equipment_id == sensor.c.equipment_id,
             ),
         )
-        .where(func.lower(alarm.c.alarm_type) == "setpoint", alarm.c.occurred_at <= as_of)
+        .where(func.lower(alarm.c.alarm_type) == "setpoint", alarm.c.alarm_start_time <= as_of)
     )
     for column, value in (
         (equipment.c.equipment_id, equipment_id),
@@ -57,7 +57,7 @@ async def get_alarm_priorities(
     order = (
         fields.cof_score.desc(),
         fields.alarm_level.desc(),
-        fields.occurred_at.asc(),
+        fields.alarm_start_time.asc(),
         fields.alarm_id.asc(),
     )
     top = (
@@ -81,7 +81,7 @@ async def get_alarm_priorities(
     summary = results[0]
     items = [
         {
-            **serialize({key: row[key] for key in top.c.keys()}),
+            **serialize({column.key: row[column.key] for column in top.c}),
             "reason": row["user_message"],
         }
         for row in results
