@@ -11,14 +11,14 @@ from sqlalchemy.pool import NullPool
 from app.config import get_settings
 from app.database import get_session
 from app.db import models as m
-from app.modules.alarms.models import setpoint
 from app.main import app
+from app.modules.alarms.models import setpoint
 
 KST = timezone(timedelta(hours=9))
 
 
 @pytest.mark.asyncio
-async def test_trend_raw_hour_day_and_split_current_voltage_sensors():
+async def test_trend_raw_hour_day_and_split_current_voltage_sensors(monkeypatch):
     engine = create_async_engine(get_settings().database_url, poolclass=NullPool)
     async with engine.connect() as connection:
         transaction = await connection.begin()
@@ -56,6 +56,7 @@ async def test_trend_raw_hour_day_and_split_current_voltage_sensors():
                 ("TEST-TREND-TT", "베어링 온도", "°C"),
                 ("TEST-TREND-IT", "모터 전류", "A RMS"),
                 ("TEST-TREND-ET", "모터 선간전압", "V RMS"),
+                ("TEST-TREND-ST", "회전수", "rpm"),
             ):
                 await connection.execute(
                     insert(m.sensor).values(
@@ -69,6 +70,7 @@ async def test_trend_raw_hour_day_and_split_current_voltage_sensors():
                 ("TEST-TREND-TT", "TEST-TREND-TT", "베어링 온도", "°C", "bearing_temp_c"),
                 ("TEST-TREND-IT", "TEST-TREND-IT", "모터 전류", "A RMS", "motor_current_a"),
                 ("TEST-TREND-ET", "TEST-TREND-ET", "모터 선간전압", "V RMS", "voltage_v"),
+                ("TEST-TREND-ST", "TEST-TREND-ST", "회전수", "rpm", "motor_rpm"),
             ):
                 await connection.execute(
                     insert(m.sensor_signal).values(
@@ -95,40 +97,60 @@ async def test_trend_raw_hour_day_and_split_current_voltage_sensors():
                     for signal_id, value in (("TEST-TREND-IT", 10.0), ("TEST-TREND-ET", 380.0))
                 ],
             )
-            await connection.execute(insert(setpoint), [
-                {
-                    "setpoint_id": "TEST-TREND-FIXED",
-                    "equipment_id": "TEST-TREND-PUMP",
-                    "sensor_id": "TEST-TREND-TT",
-                    "signal_id": "TEST-TREND-TT",
-                    "alarm_level": 2,
-                    "direction": "HIGH",
-                    "operator": ">=",
-                    "calculation_type": "FIXED",
-                    "parameter": 5.0,
-                    "reference": None,
-                    "unit": "°C",
-                    "filter_minutes": 3,
-                    "effective_from": datetime(2026, 1, 1, tzinfo=KST),
-                    "effective_to": None,
-                },
-                {
-                    "setpoint_id": "TEST-TREND-DYNAMIC",
-                    "equipment_id": "TEST-TREND-PUMP",
-                    "sensor_id": "TEST-TREND-TT",
-                    "signal_id": "TEST-TREND-TT",
-                    "alarm_level": 1,
-                    "direction": "HIGH",
-                    "operator": ">=",
-                    "calculation_type": "EXPECTED_OFFSET",
-                    "parameter": 10.0,
-                    "reference": "E_TB",
-                    "unit": "°C",
-                    "filter_minutes": 3,
-                    "effective_from": datetime(2026, 1, 1, tzinfo=KST),
-                    "effective_to": None,
-                },
-            ])
+            await connection.execute(
+                insert(setpoint),
+                [
+                    {
+                        "setpoint_id": "TEST-TREND-FIXED",
+                        "equipment_id": "TEST-TREND-PUMP",
+                        "sensor_id": "TEST-TREND-TT",
+                        "signal_id": "TEST-TREND-TT",
+                        "alarm_level": 2,
+                        "direction": "HIGH",
+                        "operator": ">=",
+                        "calculation_type": "FIXED",
+                        "parameter": 5.0,
+                        "reference": None,
+                        "unit": "°C",
+                        "filter_minutes": 3,
+                        "effective_from": datetime(2026, 1, 1, tzinfo=KST),
+                        "effective_to": None,
+                    },
+                    {
+                        "setpoint_id": "TEST-TREND-DYNAMIC",
+                        "equipment_id": "TEST-TREND-PUMP",
+                        "sensor_id": "TEST-TREND-TT",
+                        "signal_id": "TEST-TREND-TT",
+                        "alarm_level": 1,
+                        "direction": "HIGH",
+                        "operator": ">=",
+                        "calculation_type": "EXPECTED_OFFSET",
+                        "parameter": 10.0,
+                        "reference": "E_TB",
+                        "unit": "°C",
+                        "filter_minutes": 3,
+                        "effective_from": datetime(2026, 1, 1, tzinfo=KST),
+                        "effective_to": None,
+                    },
+                ],
+            )
+            await connection.execute(
+                insert(setpoint).values(
+                    setpoint_id="TEST-TREND-RPM",
+                    equipment_id="TEST-TREND-PUMP",
+                    sensor_id="TEST-TREND-ST",
+                    signal_id="TEST-TREND-ST",
+                    alarm_level=1,
+                    direction="LOW",
+                    operator="<=",
+                    calculation_type="BASELINE_OFFSET",
+                    parameter=-5,
+                    reference="B_RPM",
+                    unit="rpm",
+                    filter_minutes=3,
+                    effective_from=datetime(2026, 1, 1, tzinfo=KST),
+                )
+            )
 
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
@@ -146,6 +168,15 @@ async def test_trend_raw_hour_day_and_split_current_voltage_sensors():
                     "TEST-TREND-FIXED": 5.0,
                     "TEST-TREND-DYNAMIC": None,
                 }
+                rpm_params = {**params, "sensor_id": "TEST-TREND-ST", "interval": "1h"}
+                monkeypatch.setattr(get_settings(), "setpoint_reference_values", None)
+                unconfigured = await client.get("/api/trend", params=rpm_params)
+                assert unconfigured.json()["setpoints"][0]["value"] is None
+                monkeypatch.setattr(
+                    get_settings(), "setpoint_reference_values", {"TEST-TREND-RPM": 100.0}
+                )
+                configured = await client.get("/api/trend", params=rpm_params)
+                assert configured.json()["setpoints"][0]["value"] == 95
 
                 for interval in ("1h", "1d"):
                     grouped = (

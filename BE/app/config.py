@@ -1,7 +1,7 @@
 from functools import lru_cache
 from urllib.parse import quote
 
-from pydantic import SecretStr, model_validator
+from pydantic import FiniteFloat, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
     ai_base_url: str = "http://127.0.0.1:8001"
     alarm_ingest_token: SecretStr | None = None
+    setpoint_reference_values: dict[str, FiniteFloat] | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

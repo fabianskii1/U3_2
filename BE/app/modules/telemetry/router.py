@@ -1,13 +1,15 @@
 from datetime import datetime
+from math import isfinite
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.query import now, valid_range
+from app.config import get_settings
 from app.database import get_session
-from app.modules.equipment.models import sensor
 from app.modules.alarms.models import setpoint
+from app.modules.equipment.models import sensor
 from app.modules.telemetry.models import sensor_signal
 
 router = APIRouter(tags=["시계열"])
@@ -37,6 +39,22 @@ TREND_SQL = {
         LIMIT :limit
     """,
 }
+
+
+def _setpoint_value(
+    calculation_type: str, parameter: float, reference: float | None
+) -> float | None:
+    if calculation_type == "FIXED":
+        value = parameter
+    elif reference is None:
+        return None
+    elif calculation_type == "BASELINE_RATIO":
+        value = reference * parameter
+    elif calculation_type in {"BASELINE_OFFSET", "EXPECTED_OFFSET"}:
+        value = reference + parameter
+    else:
+        return None
+    return value if isfinite(value) else None
 
 
 @router.get("/api/trend")
@@ -156,6 +174,7 @@ async def trend(
         .mappings()
         .all()
     )
+    reference_values = get_settings().setpoint_reference_values or {}
     return {
         "sensor_id": signal["sensor_id"],
         "signal_id": signal["signal_id"],
@@ -173,7 +192,11 @@ async def trend(
                 "alarm_level": rule["alarm_level"],
                 "direction": rule["direction"],
                 "operator": rule["operator"],
-                "value": rule["parameter"] if rule["calculation_type"] == "FIXED" else None,
+                "value": _setpoint_value(
+                    rule["calculation_type"],
+                    rule["parameter"],
+                    reference_values.get(rule["setpoint_id"]),
+                ),
                 "effective_from": rule["effective_from"].isoformat(),
                 "effective_to": rule["effective_to"].isoformat() if rule["effective_to"] else None,
             }

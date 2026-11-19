@@ -44,6 +44,7 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 - `GET /api/hierarchy`, `GET /api/equipment/{id}`
 - `GET /api/trend`: `sensor_id` 또는 `signal_id`, 기간, 간격으로 적재된 1분 값 또는 1시간·1일 평균 조회
+- 트렌드의 동적 setpoint는 분석기에서 확인한 참조값을 `SETPOINT_REFERENCE_VALUES`에 JSON 객체로 등록하면 표시된다. 키는 버전이 포함된 `setpoint_id`, 값은 해당 규칙과 같은 단위의 숫자다. 예를 들어 분석기에서 특정 규칙의 참조값을 100 rpm으로 확인했다면 `{"해당-setpoint-id":100}`으로 등록한다. Compose는 `DB/.env`, 로컬 BE는 `BE/.env`를 사용한다. `BASELINE_OFFSET`과 `EXPECTED_OFFSET`은 참조값에 파라미터를 더하고 `BASELINE_RATIO`는 참조값에 파라미터를 곱한다. 등록되지 않은 동적 경계는 `null`을 반환한다.
 - `GET /api/alarms/history`는 `plant_id`, `equipment_group_id`, `equipment_type`, `equipment_id`, `sensor_id`, `alarm_level`, `event_type`, 시간대가 포함된 `from`·`to`를 받는다. 조회 기간은 시작 포함·종료 제외다. 응답은 `items`와 `next_cursor`이며 각 행에 `alarm_start_time`, `event_type`, `setpoint_id`, `is_active`, `cof_score`를 포함한다.
 - `GET /api/alarms/priorities`는 조회 범위의 활성 Setpoint를 설비별로 묶고 최고 CoF 알람을 반환한다. 동점은 심각도 내림차순, 시작 시각 및 알람 ID 오름차순으로 해결한다. `group_by=alarm`은 개별 알람 순위를 반환한다. `as_of`를 지정하면 수신·해제 영수증의 이벤트 시각으로 상태를 재생한다. 채팅도 같은 순위 서비스를 사용한다.
 - `GET /api/error-types`, `GET /api/error-histories`, `GET /api/maintenance-histories`

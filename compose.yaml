@@ -47,6 +47,7 @@ services:
       <<: *be_environment
       AI_BASE_URL: http://ai:8001
       ALARM_INGEST_TOKEN: ${ALARM_INGEST_TOKEN:-}
+      SETPOINT_REFERENCE_VALUES: ${SETPOINT_REFERENCE_VALUES:-null}
     ports:
       - "127.0.0.1:${BE_PORT:-8000}:8000"
     depends_on:
