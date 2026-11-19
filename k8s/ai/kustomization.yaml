@@ -13,7 +13,7 @@ images:
   - name: ai-blue-image
     newName: harbor.skala-us.com/u3-2/ai
     # Published by the AI CI workflow; both image aliases pin this version.
-    newTag: "056c253625e73639604ab088ca475cfa675f61d7"
+    newTag: "9c63c1e3c04c19d2ee430d01d7ea946f04926722"
   - name: ai-green-image
     newName: harbor.skala-us.com/u3-2/ai
     newTag: "056c253625e73639604ab088ca475cfa675f61d7"
