@@ -88,7 +88,7 @@ async def create_session(
         _cookie_value(str(session_id), token),
         httponly=True,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=get_settings().force_secure_chat_cookie or request.url.scheme == "https",
         max_age=30 * 24 * 60 * 60,
         path="/api/chat",
     )

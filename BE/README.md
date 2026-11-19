@@ -53,6 +53,8 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 초기 마이그레이션은 ERD에서 필드가 정의된 26개 테이블을 만든다. 후속 마이그레이션은 코드형 ID와 센서 사양, `sensor_signal` 48건, `sensor_data_1m` 및 `equipment_run_state_1m` TimescaleDB 하이퍼테이블을 만든다. `d4e6c2a9b105`는 전류 IT와 전압 ET를 각각 독립 센서로 연결하고 UT 센서를 제거한다. 최종 센서와 신호는 각각 48건이다. 설비 상세는 적재된 최신 관측값과 실제 측정 시각을 반환한다.
 
+`9a6d82f0c713`은 공정 종류(`e4c7a1b29d63`)와 CDU 별칭(`7f4d54dc99b2`) 분기를 합치는 단일 head다. 기존 분기와 데이터를 그대로 유지하므로 새 DB와 어느 한 분기까지 적용된 DB 모두 `alembic upgrade head`로 두 분기를 적용한다.
+
 ## 채팅 및 알람 수신
 
 - 채팅 에이전트는 [AI/workflow](../AI/workflow/)에 있다. BE는 사용자 세션과 DB 조회 도구를 에이전트에 연결한다. Compose와 BE 이미지 빌드는 `agent_workflow` 빌드 컨텍스트로 이 패키지를 포함한다.
@@ -85,3 +87,19 @@ uv run pytest -q
 ```
 
 통합 테스트는 실행 중인 SKADI PostgreSQL을 사용한다. 테스트 행은 트랜잭션에서만 생성하고 종료 시 롤백한다.
+
+BE CI는 `BE/**`, `AI/workflow/**` 변경 시 main 푸시와 main 대상 PR에서 실행하며 수동 실행도 지원한다. 별도 TimescaleDB 2.32/PG17 테스트 DB에 `timescaledb`, `vector` 확장을 준비하고 frozen 의존성으로 마이그레이션·Ruff·전체 pytest를 실행한다. 이후 amd64 이미지를 빌드하고 `deploy/ci-smoke.sh`로 실제 HTTP 조회와 두 마이그레이션 분기 결과를 검증한다. Harbor 로그인과 업로드는 main의 PR 외 실행에서만 수행한다.
+
+이미지를 직접 빌드할 때도 프로젝트 루트에서 공유 에이전트 패키지의 이름 있는 빌드 컨텍스트를 전달한다.
+
+```bash
+docker buildx build --platform linux/amd64 --load \
+  --build-context agent_workflow=./AI/workflow \
+  -f BE/deploy/Dockerfile -t skadi-be:local ./BE
+```
+
+이미지 검증은 마이그레이션한 일회용 DB의 Docker 네트워크를 전달한다. DB 별칭은 `db`, DB·사용자는 `ci_backend`, 비밀번호는 테스트 전용 `ci_backend_only`를 사용한다. 스크립트는 실제 `.env`나 AI 키를 읽지 않으며 모델 API를 호출하지 않는다.
+
+```bash
+bash BE/deploy/ci-smoke.sh skadi-be:local <disposable-db-network>
+```

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     db_port: int = 5433
     cors_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]
     ai_base_url: str = "http://127.0.0.1:8001"
+    force_secure_chat_cookie: bool = False
     alarm_ingest_token: SecretStr | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

@@ -6,6 +6,11 @@ on:
     paths:
       - DB/docker/**
       - .github/workflows/build-db.yaml
+  pull_request:
+    branches: [main]
+    paths:
+      - DB/docker/**
+      - .github/workflows/build-db.yaml
   workflow_dispatch:
 
 permissions:
@@ -16,7 +21,6 @@ env:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -42,6 +46,7 @@ jobs:
         run: bash DB/docker/ci-smoke.sh "$DB_IMAGE"
 
       - name: Log in to Harbor
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: harbor.skala-us.com
@@ -49,4 +54,5 @@ jobs:
           password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Push tested database image
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: docker push "$DB_IMAGE"

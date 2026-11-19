@@ -23,3 +23,17 @@ docker compose --env-file DB/.env exec db psql -U skadi -d skadi -c "SELECT extn
 Use the values of `POSTGRES_USER` and `POSTGRES_DB` from `DB/.env` in the second command if you changed them.
 
 The initialization SQL runs only when the named data volume is created for the first time. For an existing volume, enable a missing extension with a migration or `CREATE EXTENSION` in the target database. Do not delete the volume to rerun initialization; that would erase the database. `docker compose --env-file DB/.env down` stops the container while retaining the volume.
+
+## Image CI
+
+`.github/workflows/build-db.yaml` checks relevant main pushes, main-targeted PRs,
+and manual runs. It builds the amd64 image and runs `DB/docker/ci-smoke.sh`
+against an isolated temporary database, verifying password authentication,
+TimescaleDB hypertable reads/writes and pgvector distance calculation. Fixtures
+are removed after the check. The narrow `.dockerignore` keeps credentials,
+dumps and the smoke script out of the image context.
+
+Only successful main runs log in to Harbor and publish `db:<commit SHA>`.
+PR checks never publish. CI does not restore a dump, migrate a production DB,
+change deployment tags or validate an existing volume upgrade. See the
+[CI guide](../docs/ci.md) and [deployment guide](../k8s/README.md).

@@ -12,14 +12,16 @@ docker compose --env-file DB/.env up -d --build
 
 FE는 `http://127.0.0.1:5173`에서 열립니다. Nginx가 같은 origin의 `/api/` 요청을 Compose의 `be:8000`으로 전달합니다. `DB/.env`의 `FE_PORT`로 호스트 포트를 변경할 수 있습니다. Docker 빌드는 `VITE_API_MODE=remote`, `VITE_API_BASE_URL=/api`를 사용합니다.
 
+이미지의 `BACKEND_UPSTREAM` 기본값은 EKS Service인 `backend:8000`입니다. Compose는 FE 환경 변수로 `BACKEND_UPSTREAM=be:8000`을 지정합니다. Nginx는 시작할 때 템플릿을 치환하며 `/api/` 경로와 쿼리를 그대로 전달하고 스트리밍 응답 버퍼링을 끕니다. 기존 독립 콘솔 자산인 `console.html`도 이미지에 포함되며 `/console.html`에서 열 수 있습니다. 이 콘솔은 외부 Google Fonts와 ECharts CDN을 사용합니다.
+
 현재 BE에서 연결되는 화면은 계층·설비 상세·트렌드·알람 이력·보고서 목록/상세와 설비 ID 조회 채팅입니다. 울산CLX 플랜트, CUD-01 그룹, 펌프 6대와 센서 48개가 기준 데이터로 들어 있습니다. 알람·보고서는 데이터가 없으면 빈 목록으로 표시됩니다. 실시간 활성 알람, 알람 SSE, 보고서 작성·편집 및 채팅의 보고서 작업은 준비 중입니다.
 
 ## 실행
 
-Node.js 22.12 이상 또는 이에 대응하는 최신 LTS와 npm을 사용합니다. 검증 환경은 Node.js 26입니다.
+Node.js 22.12 이상 또는 이에 대응하는 최신 LTS와 npm을 사용합니다. CI와 Docker 빌드는 Node.js 22를 사용합니다.
 
 ```bash
-cd FE
+cd fe
 npm ci
 npm run dev
 ```
@@ -116,6 +118,8 @@ npm run build
 npm run preview
 ```
 
+- FE 이미지 검사: `docker build --platform linux/amd64 -f fe/deploy/Dockerfile -t skadi-fe-ci:local fe` 후 `bash fe/deploy/ci-smoke.sh skadi-fe-ci:local`을 프로젝트 루트에서 실행합니다. 외부 API·키 없이 독립 네트워크에서 정적 자산·독립 콘솔·SPA 딥링크·API 경로/쿼리·스트리밍 버퍼링 설정과 기본/Compose upstream을 확인하고 컨테이너와 네트워크를 정리합니다.
+- GitHub Actions는 `main` 대상 PR, 관련 `main` push, 수동 실행에서 전체 Vitest·프로덕션 빌드·이미지 런타임 검사를 수행합니다. Harbor 로그인과 SHA 태그 이미지 업로드는 PR이 아닌 `main` 실행에서만 수행합니다.
 - Vitest: URL 계층 복원, 하위 조건 해제, Agent 수정 충돌, 브라우저 초안 복구, 저장 직렬화, 저장 실패·지연 저장, Mock 채팅 계약.
 - Playwright: 설비 딥링크, 1초 폴링, 보고서 생성·채팅 수정·페이지 이동·새로고침·새 브라우저 컨텍스트 복구, 패널 너비, HTTP 409 충돌 해결, 잘못된 날짜 처리.
 - E2E는 포트 5199의 별도 서버와 `.data-e2e/`를 사용하여 개발 데이터와 분리합니다. 의존성 캐시도 개발용 `node_modules/.vite-dev/`와 E2E용 `node_modules/.vite-e2e/`로 분리합니다.

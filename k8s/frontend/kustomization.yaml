@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: u3-2
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+images:
+  - name: frontend-image
+    newName: harbor.skala-us.com/u3-2/frontend
+    newTag: "33e74a2bfb9294d4467bd4802cf2ade741a7dba0"
