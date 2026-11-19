@@ -189,7 +189,7 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
 
                 plant = await send("울산 clx는 몇호기까지 있는지")
                 assert "울산CLX 공정은 1개" in plant and "내부 설비 6대" in plant
-                assert event_data(plant, "citation")[0]["href"] == "/equip?unit_id=CUD-01"
+                assert event_data(plant, "citation")[0]["href"] == "/equip?unit_id=CDU-01"
                 assert not event_data(plant, "navigate")
                 await db.execute(
                     insert(models.equipment_group).values(
@@ -207,8 +207,8 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                 assert lookups == []
 
                 assert "event: citation" not in await send("2호기 압축기 진동현황 보여줘")
-                unit_href = "/equip?unit_id=CUD-01"
-                for query in ("1호기", "CDU 1호기", "CUD 1호기"):
+                unit_href = "/equip?unit_id=CDU-01"
+                for query in ("1호기", "CDU 1호기"):
                     reply = await send(query)
                     assert r"상압증류\(CDU\) 1호기" in event_data(reply, "message.delta")[0]["text"]
                     assert event_data(reply, "citation") == [
@@ -228,7 +228,7 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                     assert f"/equip?equip_id=P{number}&sensor_id={sensor_id}" in await send(
                         f"{number}번 펌프 진동 현황 보여줘"
                     )
-                unit_sensor = await send("진동 추이", equipment_group_id="CUD-01")
+                unit_sensor = await send("진동 추이", equipment_group_id="CDU-01")
                 assert "펌프를 선택해 주세요" in unit_sensor and unit_href in unit_sensor
                 assert not event_data(unit_sensor, "navigate")
                 await db.execute(
@@ -290,7 +290,7 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                 (trend_link,) = event_data(trend, "citation")
                 assert_trend(trend_link["href"], "10-IT-1304")
                 assert event_data(trend, "navigate") == [{"href": trend_link["href"]}]
-                assert unit_href in await send("CUD 1호기 상태 보여줘")
+                assert unit_href in await send("CDU 1호기 상태 보여줘")
                 assert '"/alarms"' in await send("알람 관련 데이터 보여줘")
                 assert "/equip?equip_id=P2&sensor_id=10-VT-1205" in await send(
                     "2번 펌프의 진동 현황 보여줘"

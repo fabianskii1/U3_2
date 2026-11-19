@@ -1,6 +1,6 @@
 import type { Hierarchy, Selection } from "../../features/hierarchy/index.ts";
 import type { Alarm } from "../../features/alarms/index.ts";
-import { CUDProcessLayout } from "../../features/equipment/ui/CUDProcessLayout.tsx";
+import { CDUProcessLayout } from "../../features/equipment/ui/CDUProcessLayout.tsx";
 import { EquipmentCards } from "../../features/equipment/ui/EquipmentCards.tsx";
 import { Card } from "../../shared/ui/card.tsx";
 
@@ -21,8 +21,8 @@ export function EquipmentPage({
     : [];
   return (
     <div className="page">
-      {unit?.processType === "CUD" ? (
-        <CUDProcessLayout
+      {unit?.processType === "CDU" ? (
+        <CDUProcessLayout
           hierarchy={hierarchy}
           selection={selection}
           alarms={alarms}

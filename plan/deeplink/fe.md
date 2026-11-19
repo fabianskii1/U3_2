@@ -20,7 +20,7 @@
 
 ## 일반 `/trend` URL
 
-- `viewId`가 없고 `/trend?plant_id=PLANT-01&unit_id=CUD-01&equip_id=P2`처럼 설비만 지정되면, P2의 **모든 센서**를 센서별로 조회·표시한다. 새로고침 후에도 동일해야 한다.
+- `viewId`가 없고 `/trend?plant_id=PLANT-01&unit_id=CDU-01&equip_id=P2`처럼 설비만 지정되면, P2의 **모든 센서**를 센서별로 조회·표시한다. 새로고침 후에도 동일해야 한다.
 - 일반 URL에 `sensor_id`가 명시되면 해당 센서만 표시한다.
 - 설비의 모든 센서 표시와 `trend_view.equipment_id`가 없는 그룹 전체 View는 다른 범위다.
 

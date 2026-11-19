@@ -5,7 +5,7 @@ import type {
   Hierarchy,
   Selection,
 } from "../../../shared/api/contracts/hierarchy.ts";
-import { CUDProcessLayout } from "./CUDProcessLayout.tsx";
+import { CDUProcessLayout } from "./CDUProcessLayout.tsx";
 
 const emptySelection: Selection = {
   plantId: null,
@@ -15,11 +15,11 @@ const emptySelection: Selection = {
 
 afterEach(cleanup);
 
-describe("CUDProcessLayout", () => {
+describe("CDUProcessLayout", () => {
   it("selects the matching demo pump in the active plant", () => {
     const onSelect = vi.fn();
     render(
-      <CUDProcessLayout
+      <CDUProcessLayout
         hierarchy={demoHierarchy}
         selection={{ ...emptySelection, plantId: "P-02" }}
         alarms={[]}
@@ -41,17 +41,17 @@ describe("CUDProcessLayout", () => {
       ...demoHierarchy.equipment[0],
       id: "P1",
       plantId: "CDU",
-      unitId: "CUD-01",
+      unitId: "CDU-01",
     };
     const hierarchy: Hierarchy = {
       plants: [{ id: "CDU", name: "CDU", location: "" }],
       units: [
-        { id: "CUD-01", name: "CUD-01", plantId: "CDU", processType: "CUD" },
+        { id: "CDU-01", name: "CDU-01", plantId: "CDU", processType: "CDU" },
       ],
       equipment: [equipment],
     };
     render(
-      <CUDProcessLayout
+      <CDUProcessLayout
         hierarchy={hierarchy}
         selection={emptySelection}
         alarms={[]}
@@ -64,7 +64,7 @@ describe("CUDProcessLayout", () => {
     });
     expect(onSelect).toHaveBeenCalledWith({
       plantId: "CDU",
-      unitId: "CUD-01",
+      unitId: "CDU-01",
       equipmentId: "P1",
     });
     expect(screen.queryByRole("button", { name: /P2.*선택/ })).toBeNull();

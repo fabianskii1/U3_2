@@ -56,7 +56,7 @@ function pumpLevel(equipment: Equipment, alarms: Alarm[]): number {
   return Math.max(equipment.equipmentStatus ?? 0, alarmLevel);
 }
 
-export function CUDProcessLayout({
+export function CDUProcessLayout({
   hierarchy,
   selection,
   alarms,

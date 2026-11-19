@@ -68,7 +68,7 @@ it("requests 1-hour series for P1-P6 and switches sensor kind and value mode", a
     .map((item, index) => ({
       ...item,
       id: `P${index + 1}`,
-      unitId: "CUD-01",
+      unitId: "CDU-01",
       plantId: "PLANT-01",
       tags: [
         { ...item.tags[0], id: `VT-${index + 1}`, name: "진동 속도 RMS" },
@@ -79,10 +79,10 @@ it("requests 1-hour series for P1-P6 and switches sensor kind and value mode", a
     plants: [{ id: "PLANT-01", name: "울산CLX", location: "울산" }],
     units: [
       {
-        id: "CUD-01",
+        id: "CDU-01",
         name: "상압증류",
         plantId: "PLANT-01",
-        processType: "CUD",
+        processType: "CDU",
       },
     ],
     equipment,
@@ -92,7 +92,7 @@ it("requests 1-hour series for P1-P6 and switches sensor kind and value mode", a
       <PumpComparisonChart
         hierarchy={hierarchy}
         plantId="PLANT-01"
-        unitId="CUD-01"
+        unitId="CDU-01"
       />
     </QueryClientProvider>,
   );

@@ -36,8 +36,8 @@ function renderPage(processType: string | null, unitId: string | null) {
 }
 
 describe("EquipmentPage process layout", () => {
-  it("shows the CDU layout only for a CUD equipment group", () => {
-    renderPage("CUD", "P-01-P1");
+  it("shows the CDU layout only for a CDU equipment group", () => {
+    renderPage("CDU", "P-01-P1");
     expect(screen.getByText("공정 배치도")).toBeInTheDocument();
     expect(screen.getByText("P-1101A")).toBeInTheDocument();
     expect(screen.queryByText("P-1201A")).not.toBeInTheDocument();
@@ -52,7 +52,7 @@ describe("EquipmentPage process layout", () => {
   });
 
   it("does not show a process layout before a group is selected", () => {
-    renderPage("CUD", null);
+    renderPage("CDU", null);
     expect(screen.queryByText("공정 배치도")).not.toBeInTheDocument();
   });
 });

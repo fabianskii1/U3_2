@@ -15,7 +15,7 @@ describe("BE 응답 변환", () => {
         equipment_group_id: "20",
         plant_id: "9007199254740993",
         equipment_group_name: "CDU",
-        process_type: "CUD",
+        process_type: "CDU",
       },
     ],
     equipment: [
@@ -46,7 +46,7 @@ describe("BE 응답 변환", () => {
   it("코드형 ID와 위치를 유지하고 없는 측정값·기준값을 만들지 않는다", () => {
     expect(hierarchy.plants[0].id).toBe("PLANT-01");
     expect(hierarchy.plants[0].location).toBe("울산광역시 남구 신정동");
-    expect(hierarchy.units[0].processType).toBe("CUD");
+    expect(hierarchy.units[0].processType).toBe("CDU");
     expect(hierarchy.equipment[0].equipmentStatus).toBe(3);
     expect(hierarchy.equipment[0].tags[0]).toMatchObject({
       id: "40",

@@ -38,7 +38,7 @@ async def test_read_contract_with_uncommitted_sample_rows():
                     equipment_group_id=unit_id,
                     plant_id=plant_id,
                     equipment_group_name="테스트 Unit",
-                    process_type="CUD",
+                    process_type="CDU",
                 )
             )
             equipment_id = "TEST-PUMP"
@@ -145,7 +145,7 @@ async def test_read_contract_with_uncommitted_sample_rows():
                 plant = next(p for p in hierarchy["plants"] if p["plant_id"] == str(plant_id))
                 assert plant["aliases"][0]["plant_alias_name"] == "별칭 공장"
                 unit = next(u for u in hierarchy["units"] if u["equipment_group_id"] == unit_id)
-                assert unit["process_type"] == "CUD"
+                assert unit["process_type"] == "CDU"
 
                 detail = (await client.get(f"/api/equipment/{equipment_id}")).json()
                 assert detail["sensors"][0]["current_value"] == 5.2

@@ -150,7 +150,7 @@ export function PumpComparisonChart({
     <Card className="pump-comparison">
       <CardHeader
         title={`${sensorKind.label} 비교 (${mode === "deviation" ? "7일 평균 대비" : "실제 값"}${unit ? ` · ${unit}` : ""})`}
-        description={`${group?.name ?? "CUD 그룹"} · 최근 완료된 7일 · 1시간 평균 · 펌프마다 한 선`}
+        description={`${group?.name ?? "CDU 그룹"} · 최근 완료된 7일 · 1시간 평균 · 펌프마다 한 선`}
       />
       <div className="pump-comparison-controls">
         <div
