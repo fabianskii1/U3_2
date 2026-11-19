@@ -26,6 +26,7 @@ vi.mock("../../features/trend/api/trend-view.queries.ts", () => ({
     queryKey: ["saved-trend-test"],
     queryFn: async () => ({
       viewId: "e6d7f434-5d9a-4e6d-b4c4-0f72fbb74092",
+      plantId: "P-01",
       equipmentGroupId: "P-01-P1",
       equipmentId: "P-1101A",
       config: {

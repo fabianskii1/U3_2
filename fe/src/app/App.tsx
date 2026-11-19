@@ -20,10 +20,15 @@ import { reportQuery } from "../features/reports/api/reports.api.ts";
 import { AppLayout } from "./layouts/AppLayout.tsx";
 import { SelectionUrlSync } from "./integrations/SelectionUrlSync.tsx";
 import { ReportAutosaveBridge } from "./integrations/ReportAutosaveBridge.tsx";
-import { resolveSelection, selectionParams } from "./router/navigation.ts";
+import {
+  resolveSelection,
+  savedTrendSelection,
+  selectionParams,
+} from "./router/navigation.ts";
 import { LoadingState } from "../shared/ui/LoadingState.tsx";
 import { ErrorState } from "../shared/ui/ErrorState.tsx";
 import { errorMessage } from "../shared/api/http-client.ts";
+import { savedTrendQuery } from "../features/trend/api/trend-view.queries.ts";
 import { Button } from "../shared/ui/button.tsx";
 import { Link } from "react-router";
 const Dashboard = lazy(() =>
@@ -65,6 +70,8 @@ export function App() {
   const hierarchy = useQuery(hierarchyQuery);
   const alarms = useQuery(alarmsQuery);
   const [params] = useSearchParams();
+  const viewId = params.get("viewId");
+  const savedTrend = useQuery(savedTrendQuery(viewId ?? ""));
   const navigate = useNavigate();
   const { pathname } = useLocation();
   if (hierarchy.isPending)
@@ -84,7 +91,10 @@ export function App() {
       </div>
     );
   const data = hierarchy.data;
-  const selection = resolveSelection(params, data);
+  const selection =
+    viewId && savedTrend.data
+      ? savedTrendSelection(savedTrend.data)
+      : resolveSelection(params, data);
   const onSelect = (next: Selection) => {
     useSelectionStore.getState().setSelection(next);
     const p = selectionParams(next, params);
@@ -92,7 +102,7 @@ export function App() {
   };
   return (
     <>
-      <SelectionUrlSync />
+      <SelectionUrlSync selection={selection} />
       {!remoteApi && <ReportAutosaveBridge />}
       <AppLayout hierarchy={data} selection={selection} onSelect={onSelect}>
         <Suspense fallback={<LoadingState />}>

@@ -13,6 +13,7 @@
 ## `/trend?viewId=<UUID>`
 
 - `viewId` 형식을 확인하고 `GET /api/chat/trend-views/{view_id}`로 저장 설정을 복원한다. 현재 세션 쿠키의 경로가 `/api/chat`이므로 이 경로를 사용한다.
+- 복원 응답의 `plantId`·`equipmentGroupId`·`equipmentId`를 화면 상단 계층 선택 및 전역 선택 상태에 반영한다. `viewId`만 있는 URL에서도 동일하게 복원한다.
 - `viewId`와 `equip_id`·`sensor_id`가 함께 있으면 저장된 `config.series`를 차트 대상으로 우선한다.
 - `config.series`의 **모든 항목**을 각 항목의 센서 ID와 개별 `start`·`end`로 조회한다. 첫 항목만 표시하거나 공통 기간으로 덮어쓰지 않는다. 같은 센서의 여러 기간은 별도 시리즈다.
 - 센서명·단위·조회 기간을 구분할 수 있는 차트를 각각 제공한다. 기존 센서 시계열 API와 데이터 페칭/캐싱을 재사용한다. `showAnomalies`는 준비된 이상 구간 데이터의 표시 설정으로 처리한다.

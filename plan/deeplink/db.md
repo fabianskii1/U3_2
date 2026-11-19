@@ -31,6 +31,7 @@
 | --- | --- |
 | `view_id` | 추측하기 어려운 비순차 UUID 기본 키 |
 | `session_id` | View 소유 채팅 세션 FK; 현행 토큰 쿠키 접근 정책에 사용 |
+| `plant_id` | 설비 그룹에서 확정한 플랜트 FK; 기존 View에도 역채움 |
 | `equipment_group_id` | 조회 대상 설비 그룹의 실제 키 |
 | `equipment_id` | 특정 설비의 실제 키; 그룹 전체 조회는 `NULL` 가능 |
 | `config` | 버전이 있는 조회 설정 `JSONB` |

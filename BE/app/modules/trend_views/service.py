@@ -42,14 +42,14 @@ class TrendViewCreate(BaseModel):
 
 async def create_trend_view(db: AsyncSession, payload: TrendViewCreate) -> tuple[UUID, str]:
     group_id = payload.equipmentGroupId
-    group = (
+    plant_id = (
         await db.execute(
-            select(equipment_group.c.equipment_group_id).where(
+            select(equipment_group.c.plant_id).where(
                 equipment_group.c.equipment_group_id == group_id
             )
         )
     ).scalar_one_or_none()
-    if group is None:
+    if plant_id is None:
         raise HTTPException(400, "설비 그룹을 찾을 수 없습니다.")
     if payload.equipmentId:
         asset = (
@@ -57,6 +57,7 @@ async def create_trend_view(db: AsyncSession, payload: TrendViewCreate) -> tuple
                 select(equipment.c.equipment_id).where(
                     equipment.c.equipment_id == payload.equipmentId,
                     equipment.c.equipment_group_id == group_id,
+                    equipment.c.plant_id == plant_id,
                 )
             )
         ).scalar_one_or_none()
@@ -71,6 +72,7 @@ async def create_trend_view(db: AsyncSession, payload: TrendViewCreate) -> tuple
                 .where(
                     sensor.c.sensor_id.in_(sensor_ids),
                     equipment.c.equipment_group_id == group_id,
+                    equipment.c.plant_id == plant_id,
                     *(
                         (equipment.c.equipment_id == payload.equipmentId,)
                         if payload.equipmentId
@@ -113,6 +115,7 @@ async def create_trend_view(db: AsyncSession, payload: TrendViewCreate) -> tuple
             insert(trend_view)
             .values(
                 session_id=payload.sessionId,
+                plant_id=plant_id,
                 equipment_group_id=group_id,
                 equipment_id=payload.equipmentId,
                 config=config,

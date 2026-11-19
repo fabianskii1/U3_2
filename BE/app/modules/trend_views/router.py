@@ -45,6 +45,7 @@ async def read_view(view_id: UUID, request: Request, db: AsyncSession = Depends(
         raise HTTPException(410, "만료된 트렌드 조회 설정입니다.")
     return {
         "viewId": str(row["view_id"]),
+        "plantId": row["plant_id"],
         "equipmentGroupId": row["equipment_group_id"],
         "equipmentId": row["equipment_id"],
         "config": row["config"],
@@ -90,5 +91,5 @@ async def message_results(
                 "url": f"/trend?viewId={row.trend_view_id}",
             }
             for row in rows
-        ]
+        ],
     }

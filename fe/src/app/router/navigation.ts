@@ -1,4 +1,17 @@
 import type { Selection, Hierarchy } from "../../features/hierarchy/index.ts";
+
+export function savedTrendSelection(view: {
+  plantId: string;
+  equipmentGroupId: string;
+  equipmentId: string | null;
+}): Selection {
+  return {
+    plantId: view.plantId,
+    unitId: view.equipmentGroupId,
+    equipmentId: view.equipmentId,
+  };
+}
+
 export function resolveSelection(
   params: URLSearchParams,
   data: Hierarchy,
@@ -27,6 +40,7 @@ export function selectionParams(
     "equip_id",
     "sensor",
     "sensor_id",
+    "viewId",
     "page",
   ])
     p.delete(key);

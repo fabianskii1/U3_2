@@ -10,6 +10,7 @@ const seriesSchema = z.object({
 
 export const savedTrendSchema = z.object({
   viewId: z.string().uuid(),
+  plantId: z.string(),
   equipmentGroupId: z.string(),
   equipmentId: z.string().nullable(),
   config: z.object({

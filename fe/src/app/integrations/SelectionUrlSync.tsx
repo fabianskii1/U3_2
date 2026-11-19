@@ -1,17 +1,14 @@
 import { useEffect } from "react";
-import { useSearchParams } from "react-router";
-import { useQuery } from "@tanstack/react-query";
 import {
-  hierarchyQuery,
   useSelectionStore,
+  type Selection,
 } from "../../features/hierarchy/index.ts";
-import { resolveSelection } from "../router/navigation.ts";
-export function SelectionUrlSync() {
-  const [params] = useSearchParams();
-  const { data } = useQuery(hierarchyQuery);
+
+export function SelectionUrlSync({ selection }: { selection: Selection }) {
   const set = useSelectionStore((s) => s.setSelection);
+  const { plantId, unitId, equipmentId } = selection;
   useEffect(() => {
-    if (data) set(resolveSelection(params, data));
-  }, [params, data, set]);
+    set({ plantId, unitId, equipmentId });
+  }, [plantId, unitId, equipmentId, set]);
   return null;
 }
