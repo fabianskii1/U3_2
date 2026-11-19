@@ -129,11 +129,12 @@ async def test_chat_trend_view_round_trip_and_session_ownership(monkeypatch):
                 assert result[0]["url"] == f"/trend?viewId={view_id}"
                 view = (await client.get(f"/api/chat/trend-views/{view_id}")).json()
                 assert view["messageId"] == str(messages[1]["session_detail_id"])
-                assert (
+                stored_view_message = (
                     await db.execute(
                         select(m.trend_view.c.session_detail_id).where(m.trend_view.c.view_id == view_id)
                     )
-                ).scalar_one() == messages[1]["session_detail_id"]
+                ).scalar_one()
+                assert stored_view_message == messages[1]["session_detail_id"]
                 assert view["plantId"] == plant_id
                 assert view["equipmentId"] == equipment_id
                 assert [item["sensorId"] for item in view["config"]["series"]] == sensors
