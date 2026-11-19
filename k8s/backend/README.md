@@ -4,14 +4,15 @@
 
 개발 중에는 운영 Service가 선택하는 Green Deployment만 Pod 1개로 실행하고 RollingUpdate로 교체한다.
 Blue Deployment는 0개로 유지한다. 기존 두 Deployment와 Service 정의는 향후 수동 Blue-Green 전환에 사용한다.
-Argo CD에서 Git 설정을 수동 Sync하며, Argo Rollouts나 추가 CRD는 사용하지 않는다.
+자동화 연결 후 Argo CD는 `gitops/dev`의 설정을 Auto Sync한다. Argo Rollouts나 추가 CRD는 사용하지 않는다.
+최초 브랜치 연결과 실패/복귀 절차는 [자동 배포 안내](../../docs/gitops.md)를 따른다.
 
 ## 현재 준비 단계
 
 이 묶음은 Blue/Green Deployment·Service·외부 Ingress를 포함한다.
 DB와 `db-credentials`는 이미 배포돼 있으며, 이번 릴리스의 DB 마이그레이션도 완료했다.
 실행 기록은 [마이그레이션 안내](../migrations/README.md)를 따른다. 완료한 Job을 다시 실행하지 않는다.
-설정 PR 병합 후 기존 Argo CD Application을 Sync해야 실제 BE 버전이 바뀐다.
+main CI가 검증·업로드한 이미지와 해당 컴포넌트 설정을 `gitops/dev`에 발행하면 기존 Application이 반영한다.
 이미지 별칭은 Kustomize가 실제 Harbor 주소로 바꾸므로 개별 Deployment 파일을 직접 적용하지 않는다.
 
 ```bash
@@ -39,7 +40,7 @@ backend-blue  ─┐
 backend-green ─┘
 ```
 
-이번 릴리스는 main CI가 검증·업로드한 `056c253625e73639604ab088ca475cfa675f61d7` 태그를 사용한다.
+초기 릴리스는 `056c253625e73639604ab088ca475cfa675f61d7` 태그다. 자동화 이후 현재 태그는 `gitops/dev`와 실제 Pod에서 확인한다.
 Blue/Green은 영역 이름이며 운영 여부는 Service `backend`의 `spec.selector.slot`으로 정한다.
 Deployment의 selector에도 `slot`을 넣어 서로의 Pod를 관리하지 않도록 했다.
 활성 Green은 `maxSurge: 1`, `maxUnavailable: 0`, `minReadySeconds: 5`다.
@@ -92,8 +93,8 @@ curl --fail-with-body https://u3-2.skala-us.com/api/hierarchy
 
 1. Git과 실제 Service에서 현재 운영 slot을 확인한다.
 2. 새 BE 이미지를 빌드해 Harbor에 올린다. 현재 CI는 업로드까지만 수행한다.
-3. `kustomization.yaml`의 `backend-green-image` 태그를 새 전체 SHA로 변경한다. Blue는 0개, Service는 Green을 유지한다.
-4. 설정 PR 병합 후 기존 `u3-2-backend` Application에서 Refresh → Sync → Synchronize한다.
+3. CI의 `promote / publish`가 `backend-green-image` 태그와 BE 배포 설정을 `gitops/dev`에 반영했는지 확인한다.
+4. 기존 `u3-2-backend`가 해당 브랜치를 Auto Sync한다. Blue는 0개, Service는 Green을 유지한다.
 5. 아래 상태와 실제 API를 확인한다. Argo Healthy와 `/health`만으로 업무·AI 연동 검증을 대신하지 않는다.
 
    ```bash
@@ -103,7 +104,7 @@ curl --fail-with-body https://u3-2.skala-us.com/api/hierarchy
    curl --fail-with-body https://u3-2.skala-us.com/api/hierarchy
    ```
 
-문제가 있으면 Green의 이미지 태그를 이전 버전으로 되돌리는 PR을 반영하고 다시 Sync한다.
+문제가 있으면 자동 발행·동기화를 중지하고 `gitops/dev`의 Green 태그를 이전 버전으로 되돌린다. 상세 절차는 자동 배포 안내를 따른다.
 `kubectl rollout undo`만 사용하면 Git과 상태가 달라진다. 이미지 복귀는 DB 스키마·쓰기 결과를 취소하지 않는다.
 
 ## 향후 수동 Blue-Green

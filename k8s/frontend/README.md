@@ -3,7 +3,8 @@
 이번 배포는 AI와 새 BE의 Rolling 반영·검증 이후에 진행한다. 전체 순서는 [상위 배포 안내](../README.md)를 따른다.
 
 성공한 CI 이미지 `harbor.skala-us.com/u3-2/frontend:056c253625e73639604ab088ca475cfa675f61d7`를
-Deployment 1개와 내부 Service `frontend:80`으로 배포한다. 새 이미지 빌드나 CI 변경은 필요하지 않다.
+Deployment 1개와 내부 Service `frontend:80`으로 초기 배포했다. 후속 성공한 CI는 새 SHA 태그를 `gitops/dev`에 발행한다.
+최초 자동화 연결과 실패/복귀 절차는 [자동 배포 안내](../../docs/gitops.md)를 따른다.
 개별 YAML 대신 Kustomize 디렉터리를 사용한다.
 
 ```bash
@@ -13,15 +14,15 @@ kubectl --context u3-2 -n u3-2 apply --dry-run=server -k k8s/frontend
 
 ## Argo CD 연결
 
-Git 반영 후 아래 설정으로 Application을 만들고 수동 Sync한다. 이 파일 작성만으로 실제 배포되지는 않는다.
+성공한 main CI가 `gitops/dev`를 생성한 후 아래 설정으로 Application을 연결한다.
 
 | 항목 | 값 |
 | --- | --- |
 | Application / Project | `u3-2-frontend` / `u3-2` |
 | Repository | `https://github.com/fabianskii1/U3_2.git` |
-| Revision / Path | `main` / `k8s/frontend` |
+| Revision / Path | `gitops/dev` / `k8s/frontend` |
 | Destination | 기존 `skala-us` 클러스터, namespace `u3-2` |
-| Sync policy | Manual |
+| Sync policy | Automated |
 
 기존 기본 ServiceAccount의 `harbor-cred`와 TLS Secret `team-tls`를 사용한다.
 새 클러스터·Ingress Controller·인증서·Secret을 만들지 않는다.
@@ -51,5 +52,5 @@ Sync 후 `/`, 실제 JS/CSS 자산, SPA 하위 경로와 기존 `/health`, `/api
 - 시작·준비·실행 상태는 HTTP `/`로 검사한다. FE 정적 파일 제공만 확인하며 BE·DB·AI 상태는 확인하지 않는다.
   종료 전 5초 대기 후 이미지의 `SIGQUIT`으로 Nginx를 종료하며 전체 종료 유예는 30초다.
 
-버전 교체는 성공한 CI 태그를 `kustomization.yaml`에 반영하고 렌더링·검증한 뒤 Git에 올려
-수동 Sync한다. 이전 이미지로 돌아갈 때도 이 태그 변경을 되돌리고 Sync한다.
+버전 교체는 성공한 CI가 `gitops/dev`의 설정과 태그를 발행하고 Argo가 Auto Sync한다.
+이전 이미지로 돌아갈 때는 자동 배포 안내의 중지·태그 복귀·재개 절차를 따른다.

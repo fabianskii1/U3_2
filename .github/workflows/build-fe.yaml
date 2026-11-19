@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - fe/**
+      - k8s/frontend/*.yaml
       - .github/workflows/build-fe.yaml
   pull_request:
     branches: [main]
     paths:
       - fe/**
+      - k8s/frontend/*.yaml
       - .github/workflows/build-fe.yaml
   workflow_dispatch:
 
@@ -80,3 +82,13 @@ jobs:
       - name: Push tested frontend image
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: docker push "$FE_IMAGE"
+
+  promote:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/promote-deployment.yaml
+    with:
+      component: frontend
+      source_sha: ${{ github.sha }}
