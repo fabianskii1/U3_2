@@ -20,13 +20,21 @@ def test_openapi_groups_every_endpoint_by_domain():
         "/api/chat/sessions": "채팅",
         "/api/chat/sessions/{session_id}/messages": "채팅",
         "/api/chat/stream": "채팅",
+        "/api/chat/trend-views": "채팅",
+        "/api/chat/trend-views/{view_id}": "채팅",
+        "/api/chat/messages/{message_id}/results": "채팅",
         "/health": "운영 상태",
     }
     assert set(schema["paths"]) == set(expected)
     for path, tag in expected.items():
         method = (
             "post"
-            if path in {"/api/alarms/intake", "/api/chat/sessions", "/api/chat/stream"}
+            if path in {
+                "/api/alarms/intake",
+                "/api/chat/sessions",
+                "/api/chat/stream",
+                "/api/chat/trend-views",
+            }
             else "get"
         )
         assert schema["paths"][path][method]["tags"] == [tag]

@@ -5,12 +5,12 @@
 - 실제 FastAPI 라우터, 인증/인가, ORM, `session`·`session_detail` 저장 흐름, 센서 조회 API 및 테스트 규칙을 확인한다. 아래 경로는 제안이며 기존 REST 관례에 맞춰 조정한다.
 - [DB 스키마](db.md)의 실제 키/소유권 필드와 [AI Tool](ai.md)의 실행 컨텍스트를 확인하고 수정 파일, 데이터 흐름, 유효성 검사 및 권한 정책을 기록한다.
 
-## `POST /api/trend-views`
+## `POST /api/chat/trend-views`
 
 - 요청: 설비 그룹 ID, 선택적 설비 ID, `sensorId/start/end` 목록, `showAnomalies`, 결과를 연결할 `session_detail`의 LLM 응답 ID 또는 검증 가능한 채팅 실행 컨텍스트.
 - 인증, 채팅 접근 권한, 설비/센서의 존재와 소속 관계를 검증한다. 센서 수, 기간, JSON 크기와 예상 조회량을 제한한다. 각 시간은 타임존이 있고 `start < end`여야 한다.
 - `trend_view` 저장과 `chat_result` 연결은 가능한 한 한 DB 트랜잭션에서 처리한다. 저장 실패 시 깨진 링크나 고아 결과를 반환하지 않는다.
-- 실제 채팅 AI 처리에서는 클라이언트가 보낸 `session_detail_id`를 무조건 신뢰하지 않고 서버에서 확인된 실행 컨텍스트를 우선한다. 현재 `chat_request_log.session_detail_id`는 AI 응답 ID이고 질문 ID는 저장하지 않으므로 [DB 설계](db.md)의 명시적 질문·응답 연결을 적용한다. 채팅 요청의 `request_id`는 입력받지만 현재 저장하지 않으므로, 재시도 방지에 쓰려면 영속화하거나 별도 idempotency 키를 둔다.
+- 실제 채팅 AI 처리에서는 클라이언트가 보낸 `session_detail_id`를 무조건 신뢰하지 않고 서버에서 확인된 실행 컨텍스트를 우선한다. `session_detail.reply_to_session_detail_id`로 원본 질문을 연결하고, `chat_request_log.request_id`로 완료된 중복 요청의 응답·링크를 재생한다.
 - DB가 발급한 비순차 UUID로 URL을 만들고 조회 조건이나 민감한 메타데이터는 URL에 넣지 않는다. 모델이 URL 인코딩 문자열을 직접 만들지 않는다.
 
 응답 예시:
@@ -22,7 +22,7 @@
 }
 ```
 
-## `GET /api/trend-views/{view_id}`
+## `GET /api/chat/trend-views/{view_id}`
 
 - 인증과 기존 로그인/채팅방/테넌트·설비 접근 정책을 적용한다. UUID를 아는 것만으로 접근을 허용하지 않는다.
 - 존재하지 않거나 권한이 없는 View, 만료된 View를 적절한 HTTP 상태로 처리하고 권한 여부 노출은 기존 정책을 따른다.

@@ -94,6 +94,8 @@ class Reflection:
     days: int | None = None
     first_only: bool = False
     selection: int | None = None
+    hours: int | None = None
+    show_anomalies: bool = False
 
 
 def normalize(value: str) -> str:
@@ -143,7 +145,7 @@ def reflect(message: str) -> Reflection:
         target,
     )
     if alias_request:
-        subject = target[:alias_request.start()].strip()
+        subject = target[: alias_request.start()].strip()
         return Reflection("alias_lookup", target=subject or None)
     if re.search(r"보고서|초안", target):
         target = re.split(r"\s*(?:정비\s*(?:조치\s*)?)?보고서|\s*초안", target, maxsplit=1)[0]
@@ -187,8 +189,12 @@ def reflect(message: str) -> Reflection:
         while STATUS_END.search(target):
             target = STATUS_END.sub("", target).strip()
 
-    duration = re.search(r"(?<!\S)(?:최근\s*)?(\d{1,2})\s*일(?=\s|$)", target)
-    days = int(duration[1]) if duration and 1 <= int(duration[1]) <= 90 else None
+    show_anomalies = bool(re.search(r"이상\s*(?:구간|치)", text))
+    target = re.sub(r"이상\s*(?:구간|치)(?:을|를)?(?:\s*표시)?", " ", target).strip()
+    duration = re.search(r"(?<!\S)(?:최근\s*)?(\d{1,2})\s*(일|시간)(?=\s|$)", target)
+    amount = int(duration[1]) if duration and 1 <= int(duration[1]) <= 90 else None
+    days = amount if duration and duration[2] == "일" else None
+    hours = amount if duration and duration[2] == "시간" else None
     if duration:
         target = (target[: duration.start()] + target[duration.end() :]).strip()
     target, sensor, signal = _extract_sensor(target)
@@ -203,4 +209,6 @@ def reflect(message: str) -> Reflection:
         relative,
         days,
         bool(re.search(r"(?<!\d)1\s*순위", text)),
+        hours=hours,
+        show_anomalies=show_anomalies,
     )

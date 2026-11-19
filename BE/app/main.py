@@ -19,6 +19,7 @@ from app.modules.histories.router import router as histories_router
 from app.modules.manuals.router import router as manuals_router
 from app.modules.reports.router import router as reports_router
 from app.modules.telemetry.router import router as telemetry_router
+from app.modules.trend_views.router import router as trend_views_router
 
 logger = logging.getLogger(__name__)
 app = FastAPI(
@@ -50,6 +51,7 @@ for domain_router in (
     alarms_router,
     histories_router,
     reports_router,
+    trend_views_router,
     manuals_router,
     chat_router,
 ):

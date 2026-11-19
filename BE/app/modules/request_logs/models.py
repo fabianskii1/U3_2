@@ -1,5 +1,5 @@
-from sqlalchemy import BigInteger, Column, Integer, Table
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import BigInteger, Column, Integer, Table, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.db.base import code_fk, fk, metadata, pk, text, time
 
@@ -39,6 +39,7 @@ chat_request_log = Table(
     text("status"),
     fk("user_id", "user.user_id", True),
     fk("session_id", "session.session_id", True),
+    Column("request_id", UUID(as_uuid=True), nullable=True),
     fk("session_detail_id", "session_detail.session_detail_id", True),
     code_fk("plant_id", "plant.plant_id", True),
     code_fk("equipment_group_id", "equipment_group.equipment_group_id", True),
@@ -49,6 +50,7 @@ chat_request_log = Table(
     time("sensor_end_time", True),
     fk("report_id", "report.report_id", True),
     Column("report_version", Integer, nullable=True),
+    UniqueConstraint("session_id", "request_id", name="uq_chat_request_session_request"),
 )
 
 

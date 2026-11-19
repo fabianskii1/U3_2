@@ -23,6 +23,7 @@
 - 한 AI 응답에 결과 여러 개를 연결할 수 있도록 1:N으로 설계한다.
 - 유형별 범용 `resource_id`는 FK를 보장할 수 없어 두지 않는다. 현재는 `trend_view_id`로 참조 무결성을 보장한다. 보고서/설비 결과를 추가할 때 타입별 FK와 CHECK 제약을 확장한다.
 - (`session_detail_id`, `trend_view_id`) 중복을 제한하고 `trend_view_id` 조회 인덱스를 둔다. 동일 View 연결 중복은 막지만 재시도로 새 View가 여러 개 생성되는 문제는 BE의 idempotency 처리도 필요하다.
+- `chat_request_log`에 nullable `request_id` UUID와 (`session_id`, `request_id`) UNIQUE 제약을 추가한다. 기존 로그는 유지하고, 같은 채팅 요청의 재전송은 저장된 응답을 재생한다.
 
 ## `trend_view`
 

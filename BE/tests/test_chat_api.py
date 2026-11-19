@@ -246,21 +246,25 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                 (rms_link,) = event_data(rms, "citation")
                 assert event_data(rms, "navigate") == [{"href": rms_link["href"]}]
 
-                def assert_trend(url, expected_sensor, days=7, *, equipment_id="P3"):
+                async def assert_trend(url, expected_sensor, days=7, *, equipment_id="P3"):
                     parsed = urlsplit(url)
                     assert parsed.path == "/trend"
                     params = parse_qs(parsed.query)
-                    assert params["equip_id"] == [equipment_id]
-                    assert params["sensor_id"] == [expected_sensor]
-                    assert params["interval"] == ["1h"]
-                    start = datetime.fromisoformat(params["from"][0])
-                    end = datetime.fromisoformat(params["to"][0])
+                    assert "viewId" in params
+                    response = await client.get(f"/api/chat/trend-views/{params['viewId'][0]}")
+                    assert response.status_code == 200
+                    view = response.json()
+                    assert view["equipmentId"] == equipment_id
+                    (series,) = view["config"]["series"]
+                    assert series["sensorId"] == expected_sensor
+                    start = datetime.fromisoformat(series["start"])
+                    end = datetime.fromisoformat(series["end"])
                     assert end - start == timedelta(days=days)
 
                 trend = await send("3번 펌프 진동 추이 보여줘", equipment_id="P2")
                 assert "진동 속도 RMS 최근 7일 추이 열기" in trend
                 (trend_link,) = event_data(trend, "citation")
-                assert_trend(trend_link["href"], "10-VT-1305")
+                await assert_trend(trend_link["href"], "10-VT-1305")
                 assert event_data(trend, "navigate") == [{"href": trend_link["href"]}]
 
                 for question, days in (
@@ -271,7 +275,7 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                 ):
                     trend = await send(question, equipment_id="P3")
                     (trend_link,) = event_data(trend, "citation")
-                    assert_trend(trend_link["href"], "10-VT-1205", days, equipment_id="P2")
+                    await assert_trend(trend_link["href"], "10-VT-1205", days, equipment_id="P2")
                     assert event_data(trend, "navigate") == [{"href": trend_link["href"]}]
 
                 current_href = "/equip?equip_id=P3&sensor_id=10-IT-1304"
@@ -280,7 +284,7 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                 assert not event_data(current, "navigate")
                 status_choice, trend_choice = event_data(current, "citation")
                 assert status_choice == {"title": "설비 현황 열기", "href": current_href}
-                assert_trend(trend_choice["href"], "10-IT-1304")
+                await assert_trend(trend_choice["href"], "10-IT-1304")
                 status = await send("설비 현황", equipment_id="P2")
                 assert event_data(status, "navigate") == [{"href": current_href}]
                 assert (event_data(status, "citation")[0]["href"]) == current_href
@@ -288,7 +292,7 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                 await send("3번 펌프 모터 전류", equipment_id="P2")
                 trend = await send("트렌드 분석", equipment_id="P2")
                 (trend_link,) = event_data(trend, "citation")
-                assert_trend(trend_link["href"], "10-IT-1304")
+                await assert_trend(trend_link["href"], "10-IT-1304")
                 assert event_data(trend, "navigate") == [{"href": trend_link["href"]}]
                 assert unit_href in await send("CDU 1호기 상태 보여줘")
                 assert '"/alarms"' in await send("알람 관련 데이터 보여줘")
@@ -349,8 +353,8 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                     equipment_id="P2",
                     sensor_id="10-ST-1203",
                 )
-                assert "/trend?equip_id=P2&sensor_id=10-VT-1205" in same_alarm_trend
-                assert f"alarm_id={alarm_ids[1]}" in same_alarm_trend
+                (alarm_trend_link,) = event_data(same_alarm_trend, "citation")
+                await assert_trend(alarm_trend_link["href"], "10-VT-1205", equipment_id="P2")
 
                 grounded = await send("이걸로 정비 보고서 써줘", equipment_id="P1")
                 assert str(alarm_ids[1]) in grounded and "나프타" in grounded

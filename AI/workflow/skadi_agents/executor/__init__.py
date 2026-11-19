@@ -1,5 +1,6 @@
 """AG-03 Executor. Agent code operates through the application's bound read tools."""
 
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta
@@ -40,6 +41,7 @@ class Reply:
     links: list[dict[str, str]] = field(default_factory=list)
     context: dict = field(default_factory=dict)
     navigation_href: str | None = None
+    trend_intent: dict | None = None
 
 
 def _link(title: str, href: str) -> dict[str, str]:
@@ -53,14 +55,105 @@ def _dates(days: int | None) -> dict[str, str]:
     return {"from": (today - timedelta(days=days - 1)).isoformat(), "to": today.isoformat()}
 
 
-def _trend_window(days: int) -> dict[str, str]:
+def _trend_window(days: int, hours: int | None = None) -> dict[str, str]:
     end = datetime.now(KST).replace(tzinfo=None, microsecond=0)
-    start = end - timedelta(days=days)
+    start = end - (timedelta(hours=hours) if hours else timedelta(days=days))
     return {"from": start.isoformat(), "to": end.isoformat(), "interval": "1h"}
 
 
-def _sensor_views(entity: Entity, matches: list[dict], days: int) -> Reply:
-    window = _trend_window(days)
+def _trend_intent(
+    entity: Entity,
+    sensor_ids: list[str],
+    durations: list[timedelta],
+    show_anomalies: bool = False,
+) -> dict:
+    end = datetime.now(KST).replace(microsecond=0)
+    return {
+        "equipmentGroupId": entity.unit_id,
+        "equipmentId": entity.id,
+        "series": [
+            {"sensorId": sensor_id, "start": (end - duration).isoformat(), "end": end.isoformat()}
+            for sensor_id, duration in zip(sensor_ids, durations, strict=True)
+        ],
+        "showAnomalies": show_anomalies,
+    }
+
+
+def _multi_trend_specs(message: str) -> tuple[str, list[tuple[str, timedelta]], bool] | None:
+    """Extract explicit sensor durations; ambiguous targets are resolved by DB tools later."""
+    labels = re.compile(r"진동|전압|전류|온도|압력|회전수")
+    segments = re.split(r"[,，]|그리고", message)
+    first = labels.search(segments[0]) if segments else None
+    if not first:
+        return None
+    target = segments[0][: first.start()].strip().removesuffix("의").strip()
+    specs: list[tuple[str, timedelta]] = []
+    for segment in segments:
+        names = labels.findall(segment)
+        period = re.search(r"(?:최근\s*)?(\d{1,2})\s*(시간|일)", segment)
+        if not names or not period:
+            continue
+        count = int(period[1])
+        if not 1 <= count <= 90:
+            return None
+        duration = timedelta(hours=count) if period[2] == "시간" else timedelta(days=count)
+        specs.extend((name, duration) for name in names)
+    if len(specs) < 2 or not target:
+        return None
+    return target, specs, "이상" in message
+
+
+async def _multi_trend_reply(
+    tools: Toolset, message: str, screen: dict[str, object]
+) -> Reply | None:
+    parsed = _multi_trend_specs(message)
+    if parsed is None:
+        return None
+    target, specs, show_anomalies = parsed
+    if len(specs) > 24:
+        return Reply("한 번에 조회할 수 있는 센서는 최대 24개입니다. 대상을 줄여 주세요.")
+    status, candidates = await tools.resolve_entity(target, screen=screen, equipment_only=True)
+    if status != "found" or len(candidates) != 1:
+        return _ask(Reflection("trend", target=target), status, candidates, {})
+    entity = candidates[0]
+    sensors = await tools.get_equipment_sensors(entity.id)
+    selected: list[str] = []
+    durations: list[timedelta] = []
+    for label, duration in specs:
+        signal = {
+            "진동": "vibration",
+            "전압": "voltage",
+            "전류": "current",
+            "온도": "temperature",
+            "압력": "pressure",
+            "회전수": "speed",
+        }[label]
+        matches = [row for row in sensors if sensor_signal(row["measurement_name"]) == signal]
+        if signal == "vibration":
+            matches = matching_sensors(matches, "진동 속도 RMS", signal) or matches
+        if len(matches) != 1:
+            return Reply(f"{label} 센서를 하나로 확정할 수 없습니다. 센서 태그를 지정해 주세요.")
+        selected.append(matches[0]["sensor_id"])
+        durations.append(duration)
+    intent = _trend_intent(entity, selected, durations, show_anomalies)
+    return Reply(
+        f"**{markdown_text(entity.name)}**의 센서별 트렌드를 엽니다.",
+        context={"equipment_id": entity.id},
+        trend_intent=intent,
+    )
+
+
+def _sensor_views(
+    entity: Entity,
+    matches: list[dict],
+    days: int,
+    hours: int | None = None,
+    show_anomalies: bool = False,
+) -> Reply:
+    window = _trend_window(days, hours)
+    if show_anomalies:
+        window["show_anomalies"] = "1"
+    period_label = f"{hours}시간" if hours else f"{days}일"
     links = []
     for sensor in matches:
         sid = sensor["sensor_id"]
@@ -69,7 +162,7 @@ def _sensor_views(entity: Entity, matches: list[dict], days: int) -> Reply:
             [
                 _link(f"{label}설비 현황 열기", entity.link("/equip", sensor_id=sid)),
                 _link(
-                    f"{label}최근 {days}일 트렌드 열기",
+                    f"{label}최근 {period_label} 트렌드 열기",
                     entity.link("/trend", sensor_id=sid, **window),
                 ),
             ]
@@ -87,11 +180,12 @@ def _sensor_views(entity: Entity, matches: list[dict], days: int) -> Reply:
         "equipment_id": entity.id,
         "sensor_id": sensor["sensor_id"],
         "days": days,
+        "hours": hours,
     }
     subject = markdown_text(f"{entity.name} · {sensor['measurement_name']}")
     return Reply(
         f"**{subject}** 데이터를 볼까요?\n\n"
-        f"최신 측정값은 **설비 현황**, 시간에 따른 변화는 **최근 {days}일 트렌드**에서 볼 수 있습니다. "
+        f"최신 측정값은 **설비 현황**, 시간에 따른 변화는 **최근 {period_label} 트렌드**에서 볼 수 있습니다. "
         "아래 링크를 누르거나 ‘설비 현황’, ‘트렌드’라고 답해 주세요.",
         links,
         context,
@@ -160,8 +254,12 @@ async def _alias_reply(
         elif key in {"이플랜트", "그플랜트", "해당플랜트", "이공장", "그공장"}:
             target = screen.get("plant_id")
         elif not key:
-            target = (screen.get("sensor_id") or screen.get("equipment_id")
-                      or screen.get("equipment_group_id") or screen.get("plant_id"))
+            target = (
+                screen.get("sensor_id")
+                or screen.get("equipment_id")
+                or screen.get("equipment_group_id")
+                or screen.get("plant_id")
+            )
         if not isinstance(target, str) or not target:
             return Reply("별칭을 확인할 대상의 이름이나 코드를 알려주세요.", context=previous)
         result = await tools.lookup_alias(target)
@@ -187,10 +285,11 @@ async def _alias_reply(
             for i, item in enumerate(choices, 1)
         ]
         return Reply(
-            "어느 대상의 별칭을 확인할까요? 번호나 코드를 입력해 주세요.\n\n"
-            + "\n".join(lines),
-            context={**previous, "pending": {"kind": "alias", "request": asdict(request),
-                                           "candidates": choices}},
+            "어느 대상의 별칭을 확인할까요? 번호나 코드를 입력해 주세요.\n\n" + "\n".join(lines),
+            context={
+                **previous,
+                "pending": {"kind": "alias", "request": asdict(request), "candidates": choices},
+            },
         )
     item = candidates[0]
     subject = markdown_text(f"{item['name']} ({item['id']})")
@@ -354,8 +453,22 @@ async def _show_equipment(
             )
         return Reply("센서 데이터를 확인할 설비의 이름이나 코드를 알려주세요.", context=previous)
     if request.intent == "trend" and not sensor_query:
+        sensors = await tools.get_equipment_sensors(entity.id)
+        if not sensors:
+            return Reply("이 설비에 등록된 센서가 없습니다.", context=previous)
+        if len(sensors) > 24:
+            return Reply("한 번에 조회할 수 있는 센서는 최대 24개입니다. 센서를 지정해 주세요.")
+        days = request.days or 7
+        duration = timedelta(hours=request.hours) if request.hours else timedelta(days=days)
         return Reply(
-            "어떤 센서의 추이를 볼까요? 예를 들어 진동이나 온도를 입력해 주세요.", context=previous
+            f"**{markdown_text(entity.name)}**의 전체 센서 트렌드를 엽니다.",
+            context={"equipment_id": entity.id},
+            trend_intent=_trend_intent(
+                entity,
+                [row["sensor_id"] for row in sensors],
+                [duration] * len(sensors),
+                request.show_anomalies,
+            ),
         )
     if not sensor_query:
         href = entity.link("/equip")
@@ -384,9 +497,9 @@ async def _show_equipment(
         )
     days = request.days or 7
     if request.intent == "sensor_options":
-        return _sensor_views(entity, matches, days)
+        return _sensor_views(entity, matches, days, request.hours, request.show_anomalies)
     path = "/trend" if request.intent == "trend" else "/equip"
-    window = _trend_window(days) if path == "/trend" else {}
+    window = _trend_window(days, request.hours) if path == "/trend" else {}
     if len(matches) > 1 and (path == "/trend" or not generic or vibration_rms):
         links = [
             _link(
@@ -408,7 +521,8 @@ async def _show_equipment(
         {"sensor_id": matches[0]["sensor_id"]} if len(matches) == 1 else {"sensor": request.signal}
     )
     measurement = matches[0]["measurement_name"] if len(matches) == 1 else sensor_query
-    view = f"최근 {days}일 추이" if path == "/trend" else "현황"
+    period_label = f"최근 {request.hours}시간" if request.hours else f"최근 {days}일"
+    view = f"{period_label} 추이" if path == "/trend" else "현황"
     subject = f"{entity.name} {measurement} {view}"
     result_context = {"equipment_id": entity.id, **filters}
     if (
@@ -425,6 +539,16 @@ async def _show_equipment(
         [_link(f"{subject} 열기", href)],
         result_context,
         navigation_href=href,
+        trend_intent=(
+            _trend_intent(
+                entity,
+                [matches[0]["sensor_id"]],
+                [timedelta(hours=request.hours) if request.hours else timedelta(days=days)],
+                request.show_anomalies,
+            )
+            if path == "/trend" and len(matches) == 1
+            else None
+        ),
     )
 
 
@@ -434,6 +558,8 @@ async def run_chat_workflow(
     screen: dict[str, object],
     previous: dict,
 ) -> Reply:
+    if multi_reply := await _multi_trend_reply(tools, message, screen):
+        return multi_reply
     request = reflect(message)
     if request.intent == "out_of_scope":
         return Reply(
@@ -456,6 +582,7 @@ async def run_chat_workflow(
             target=sensor_view["equipment_id"],
             sensor=sensor_view["sensor_id"],
             days=request.days or sensor_view["days"],
+            hours=request.hours or sensor_view.get("hours"),
         )
     screen_equipment_id = screen.get("equipment_id")
     if isinstance(screen_equipment_id, str) and screen.get("alarm_id"):
@@ -484,7 +611,9 @@ async def run_chat_workflow(
                 request = replace(Reflection(**pending["request"]), selection=None)
             else:
                 selected = Entity(**candidate)
-                request = replace(Reflection(**pending["request"]), target=selected.id, selection=None)
+                request = replace(
+                    Reflection(**pending["request"]), target=selected.id, selection=None
+                )
         elif request.selection is not None:
             return Reply(
                 f"1번부터 {len(choices)}번 중에서 골라 주세요.",

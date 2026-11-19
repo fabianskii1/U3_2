@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
+import { z } from "zod";
 import { TrendingUp, Info } from "lucide-react";
 import type { Hierarchy, Selection } from "../../features/hierarchy/index.ts";
 import {
@@ -10,6 +11,8 @@ import {
 } from "../../features/trend/index.ts";
 import { Card, CardHeader } from "../../shared/ui/card.tsx";
 import { PumpComparisonChart } from "../../features/trend/ui/PumpComparisonChart.tsx";
+import { MultiTrendView } from "../../features/trend/ui/MultiTrendView.tsx";
+import { savedTrendQuery } from "../../features/trend/api/trend-view.queries.ts";
 import { Select } from "../../shared/ui/select.tsx";
 import { DateRangePicker } from "../../shared/ui/DateRangePicker.tsx";
 import { EmptyState } from "../../shared/ui/EmptyState.tsx";
@@ -28,6 +31,109 @@ import {
   MAX_TREND_POINTS,
 } from "../../features/trend/model/trend-interval.ts";
 export function TrendPage({
+  hierarchy,
+  selection,
+}: {
+  hierarchy: Hierarchy;
+  selection: Selection;
+}) {
+  const [params] = useSearchParams();
+  const viewId = params.get("viewId");
+  const equipmentId = params.get("equip_id");
+  if (viewId !== null)
+    return <SavedTrendPage hierarchy={hierarchy} viewId={viewId} />;
+  if (equipmentId && !params.has("sensor_id"))
+    return (
+      <EquipmentTrendPage hierarchy={hierarchy} equipmentId={equipmentId} />
+    );
+  return <LegacyTrendPage hierarchy={hierarchy} selection={selection} />;
+}
+
+function SavedTrendPage({
+  hierarchy,
+  viewId,
+}: {
+  hierarchy: Hierarchy;
+  viewId: string;
+}) {
+  const query = useQuery(savedTrendQuery(viewId));
+  if (!z.string().uuid().safeParse(viewId).success)
+    return <ErrorState message="올바르지 않은 트렌드 링크입니다." />;
+  if (query.isPending) return <LoadingState />;
+  if (query.isError)
+    return (
+      <ErrorState
+        message={errorMessage(query.error)}
+        retry={() => void query.refetch()}
+      />
+    );
+  const asset = hierarchy.equipment.find(
+    (item) => item.id === query.data.equipmentId,
+  );
+  return (
+    <div className="page">
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow">SAVED TREND VIEW</div>
+          <h1>{asset ? `${asset.name} 트렌드` : "저장된 트렌드"}</h1>
+          <p>저장 당시 확정된 센서별 조회 기간을 표시합니다.</p>
+        </div>
+      </div>
+      <MultiTrendView
+        hierarchy={hierarchy}
+        series={query.data.config.series}
+        showAnomalies={query.data.config.showAnomalies}
+      />
+    </div>
+  );
+}
+
+function EquipmentTrendPage({
+  hierarchy,
+  equipmentId,
+}: {
+  hierarchy: Hierarchy;
+  equipmentId: string;
+}) {
+  const asset = hierarchy.equipment.find((item) => item.id === equipmentId);
+  const [params] = useSearchParams();
+  const range = defaultRange();
+  const bounds = trendRange(
+    params.get("from") ?? range.from,
+    params.get("to") ?? range.to,
+  );
+  if (!asset) return <ErrorState message="설비를 찾을 수 없습니다." />;
+  if (!bounds.valid)
+    return <ErrorState message="시작 일자와 종료 일자를 확인하세요." />;
+  if (!asset.tags.length)
+    return (
+      <EmptyState
+        title="센서가 없습니다"
+        description="등록된 센서가 없습니다."
+      />
+    );
+  return (
+    <div className="page">
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow">SIGNAL ANALYTICS</div>
+          <h1>{asset.name} 전체 센서 트렌드</h1>
+        </div>
+      </div>
+      <MultiTrendView
+        hierarchy={hierarchy}
+        series={asset.tags.map((tag) => ({
+          sensorId: tag.id,
+          start: bounds.from,
+          end: bounds.to,
+        }))}
+        showAnomalies={false}
+      />
+    </div>
+  );
+}
+
+function LegacyTrendPage({
   hierarchy,
   selection,
 }: {
