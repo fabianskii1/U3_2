@@ -1,17 +1,17 @@
-# BE Blue-Green 배포 설정
+# BE 개발용 Rolling 배포
 
 현재 고정 태그와 새 통합 코드의 배포 순서는 [상위 배포 안내](../README.md)를 먼저 확인한다.
 
-AI와 같은 수동 Blue-Green 구성이다. Deployment 두 개와 운영·검증 Service를 사용한다.
-Argo CD가 Git의 설정을 반영하며 Argo Rollouts나 추가 CRD는 설치하지 않는다.
-자동 검증·승격·오류 시 자동 복귀 기능은 포함하지 않는다.
+개발 중에는 운영 Service가 선택하는 Green Deployment만 Pod 1개로 실행하고 RollingUpdate로 교체한다.
+Blue Deployment는 0개로 유지한다. 기존 두 Deployment와 Service 정의는 향후 수동 Blue-Green 전환에 사용한다.
+Argo CD에서 Git 설정을 수동 Sync하며, Argo Rollouts나 추가 CRD는 사용하지 않는다.
 
 ## 현재 준비 단계
 
-BE 소스 코드는 변경하지 않았다. 이 묶음은 Blue/Green Deployment·Service·외부 Ingress를 포함한다.
-DB와 Secret은 `k8s/db` 절차로 별도 준비하고 업무 API 검증 전 덤프 복원·스키마 상태를 확인한다.
-Git push, Argo CD Application 생성 및 실제 배포도 이 파일 작성만으로 수행되지 않는다.
-먼저 DB와 Secret을 준비해야 두 BE Pod가 정상 실행되고 Ready 상태가 될 수 있다.
+이 묶음은 Blue/Green Deployment·Service·외부 Ingress를 포함한다.
+DB와 `db-credentials`는 이미 배포돼 있으며, 이번 릴리스의 DB 마이그레이션도 완료했다.
+실행 기록은 [마이그레이션 안내](../migrations/README.md)를 따른다. 완료한 Job을 다시 실행하지 않는다.
+설정 PR 병합 후 기존 Argo CD Application을 Sync해야 실제 BE 버전이 바뀐다.
 이미지 별칭은 Kustomize가 실제 Harbor 주소로 바꾸므로 개별 Deployment 파일을 직접 적용하지 않는다.
 
 ```bash
@@ -24,26 +24,28 @@ kubectl kustomize k8s/backend
 
 | 파일 | 역할 |
 | --- | --- |
-| `deployment-blue.yaml` | Blue 실행 영역, Pod 1개 |
-| `deployment-green.yaml` | Green 실행 영역, Pod 1개 |
+| `deployment-blue.yaml` | 비활성 Blue, Pod 0개 |
+| `deployment-green.yaml` | 활성 Green, Pod 1개, RollingUpdate |
 | `service.yaml` | 운영 `backend`와 검증 `backend-preview`의 대상 선택 |
 | `ingress.yaml` | 팀 HTTPS 도메인의 `/api`와 `/health`를 운영 Service에 연결 |
 | `kustomization.yaml` | 배포 파일 묶기와 각 영역의 이미지 버전 관리 |
 
 ```text
 운영 경로: backend:8000         → backend-green
-검증 경로: backend-preview:8000 → backend-blue
+검증 경로: backend-preview:8000 → backend-blue (개발 중 Pod 0개)
 
 backend-blue  ─┐
               ├→ db:5432 → 같은 PostgreSQL
 backend-green ─┘
 ```
 
-현재 두 영역에는 각각 확인된 이전 BE 이미지 태그가 고정돼 있다.
+이번 릴리스는 main CI가 검증·업로드한 `056c253625e73639604ab088ca475cfa675f61d7` 태그를 사용한다.
 Blue/Green은 영역 이름이며 운영 여부는 Service `backend`의 `spec.selector.slot`으로 정한다.
 Deployment의 selector에도 `slot`을 넣어 서로의 Pod를 관리하지 않도록 했다.
-각 Deployment의 `Recreate`는 해당 영역의 Pod 교체 방식이다. Blue-Green 전환은 Service가 담당한다.
-운영 영역에 새 이미지를 직접 반영하면 해당 영역의 교체 동안 중단될 수 있다.
+활성 Green은 `maxSurge: 1`, `maxUnavailable: 0`, `minReadySeconds: 5`다.
+교체 중에는 새 Pod가 준비될 때까지 기존 Pod를 유지한다. 교체 전후 코드가 같은 DB와 API 계약에 호환돼야 한다.
+이 설정만으로 처리 중인 채팅·SSE 요청의 무중단을 보장하지는 않는다.
+비활성 Blue의 `Recreate`는 Pod 0개인 현재 운영 경로에 영향을 주지 않는다.
 
 ## 팀 HTTPS 도메인 연결
 
@@ -63,20 +65,16 @@ BE는 `/api/hierarchy` 등 `/api`가 포함된 경로를 이미 정의하고 있
 같은 호스트의 다른 Ingress에 rewrite·regex를 추가하면 Nginx의 호스트 전체 경로 매칭에 영향을 줄 수 있으므로
 AI·FE Ingress 추가 시 기존 API·상태 확인 경로도 다시 검증한다.
 
-저장소 루트에서 설정을 확인한 뒤 Git에 반영한다. 아래 명령은 사용자가 실행할 때 반영된다.
+저장소 루트에서 렌더링한 뒤 설정 PR을 검토·병합한다.
 
 ```bash
 kubectl kustomize k8s/backend
-git add k8s/backend/ingress.yaml k8s/backend/kustomization.yaml k8s/backend/README.md
-git diff --cached --stat
-git commit -m "deploy: route backend API through team HTTPS ingress"
-git push origin main
+kubectl --context u3-2 -n u3-2 apply --dry-run=server -k k8s/backend
 ```
 
 Argo CD의 기존 `u3-2-backend` App에서 Refresh 후 Sync → Synchronize한다.
-Ingress를 추가하는 작업이라 BE Deployment의 Pod template이나 운영 slot은 변경하지 않는다.
-현재 CI는 관련 경로의 main push와 PR에서 검증하며, main 실행만 이미지를 업로드한다. 경로 설정만 복구할 때는
-Kustomize에서 지정한 기존 이미지 태그를 그대로 사용한다.
+이번 변경은 기존 Ingress·Service selector를 유지하고 활성 Green의 이미지를 갱신한다.
+현재 CI는 관련 경로의 main push와 PR에서 검증하며, main 실행만 이미지를 업로드한다.
 
 ```bash
 DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib \
@@ -90,23 +88,36 @@ curl --fail-with-body https://u3-2.skala-us.com/api/hierarchy
 `/health`는 DB 연결만 확인하므로 업무 데이터 조회는 `/api/hierarchy`로 별도 확인한다.
 채팅의 BE·AI 버전 호환과 실제 모델 연결은 이 Ingress 확인과 별도로 검증한다.
 
-## 버전 교체 순서
+## 개발 중 버전 교체
 
 1. Git과 실제 Service에서 현재 운영 slot을 확인한다.
 2. 새 BE 이미지를 빌드해 Harbor에 올린다. 현재 CI는 업로드까지만 수행한다.
-3. `kustomization.yaml`에서 비운영 영역의 이미지 태그만 바꾸어 Git에 반영한다.
-   운영 이미지, 운영 환경 설정, Service selector는 이 변경에 포함하지 않는다.
-4. Argo CD 동기화 후 비운영 Pod의 준비 상태와 실제 API 동작을 검증한다.
-5. 검증이 끝나면 별도 커밋에서 운영·검증 Service의 slot을 서로 바꾸고 동기화한다.
-6. 이전 Pod와 이미지를 유지한 채 운영 상태와 처리 중인 요청을 확인한다.
-   문제가 있으면 Service 전환 커밋을 되돌려 기존 영역으로 복귀한다.
+3. `kustomization.yaml`의 `backend-green-image` 태그를 새 전체 SHA로 변경한다. Blue는 0개, Service는 Green을 유지한다.
+4. 설정 PR 병합 후 기존 `u3-2-backend` Application에서 Refresh → Sync → Synchronize한다.
+5. 아래 상태와 실제 API를 확인한다. Argo Healthy와 `/health`만으로 업무·AI 연동 검증을 대신하지 않는다.
 
-Blue에서 Green으로 전환할 때 `service.yaml`에서 바꿀 값은 다음과 같다.
+   ```bash
+   kubectl --context u3-2 -n u3-2 rollout status deployment/backend-green --timeout=180s
+   kubectl --context u3-2 -n u3-2 get deployment backend-green backend-blue
+   curl --fail-with-body https://u3-2.skala-us.com/health
+   curl --fail-with-body https://u3-2.skala-us.com/api/hierarchy
+   ```
+
+문제가 있으면 Green의 이미지 태그를 이전 버전으로 되돌리는 PR을 반영하고 다시 Sync한다.
+`kubectl rollout undo`만 사용하면 Git과 상태가 달라진다. 이미지 복귀는 DB 스키마·쓰기 결과를 취소하지 않는다.
+
+## 향후 수동 Blue-Green
+
+운영 검증 시 Blue에 후보 이미지를 지정하고 replicas를 1로 올린다. 각 slot의 전략을 `Recreate`로 맞추되
+현재 활성 Green의 Pod template은 유지한다. `backend-preview`로 후보 기능·호환성을 검사한 뒤
+별도 Git 변경으로 Service selector만 바꾼다.
+
+현재 Green에서 후보 Blue로 전환할 때의 값은 다음과 같다.
 
 | Service | 전환 전 | 전환 후 |
 | --- | --- | --- |
-| `backend` | `slot: blue` | `slot: green` |
-| `backend-preview` | `slot: green` | `slot: blue` |
+| `backend` | `slot: green` | `slot: blue` |
+| `backend-preview` | `slot: blue` | `slot: green` |
 
 기존 연결은 Service 변경만으로 새 Pod로 이동하지 않는다. 이전 Pod를 즉시 종료하지 않고
 엔드포인트 반영, 처리 중인 요청, 운영 관찰 및 복귀 기간을 고려해 유지한다.
@@ -129,10 +140,10 @@ Blue에서 Green으로 전환할 때 `service.yaml`에서 바꿀 값은 다음�
 ## 자원과 운영 제약
 
 - BE Pod당 request `100m / 256Mi`, limit `500m / 512Mi`다.
-  두 개 합계는 request `200m / 512Mi`, limit `1 CPU / 1Gi`다. 초기 설정이며 처리량 보장은 아니다.
-- 현재 AI 두 영역의 CPU limit 합계도 1 CPU다. 팀 쿼터는 4 CPU / 8Gi이며,
-  BE·AI·DB·FE의 limits 합계는 기본 2.6 CPU다. 마이그레이션과 추가 복제본 자원도 합산한다.
-  비운영 영역을 0개로 두면 사용량은 줄지만 검증·전환·복귀 전에 다시 기동하고 확인해야 한다.
+  개발 중에는 활성 1개이며, 교체 중 새 Pod 1개의 자원이 추가된다. 초기 설정이며 처리량 보장은 아니다.
+- 팀 쿼터는 4 CPU / 8Gi다. BE·AI·DB·FE의 개발 설정 limits 합계는 1.6 CPU / 2176Mi다.
+  BE·AI·FE가 동시에 교체용 Pod를 1개씩 만들면 2.7 CPU / 3328Mi다.
+  종료 중인 Pod·Job·추가 복제본 사용량도 확인한다. 향후 Blue-Green 기동 전에는 후보 자원을 다시 계산한다.
 - 비밀번호 변경은 두 영역에 영향을 준다. 환경변수는 Pod 시작 때 읽히므로 별도의 교체 계획이 필요하다.
 - Argo CD Self Heal을 켠 경우 포털에서 앱을 끄기 전에 자동 동기화를 끄거나
   두 Deployment의 `replicas`를 Git에서 모두 0으로 변경해야 한다.
@@ -142,5 +153,5 @@ Blue에서 Green으로 전환할 때 `service.yaml`에서 바꿀 값은 다음�
 - [Kubernetes Service selector](https://kubernetes.io/docs/concepts/services-networking/service/)
 - [Kubernetes Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/)
 - [Nginx Ingress annotations](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/annotations/)
-- [Kubernetes Deployment Recreate](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#recreate-deployment)
+- [Kubernetes Deployment RollingUpdate](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-update-deployment)
 - [Argo Rollouts의 Blue-Green 개념](https://argo-rollouts.readthedocs.io/en/stable/features/bluegreen/)

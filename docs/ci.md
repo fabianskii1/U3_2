@@ -53,14 +53,17 @@ CI가 새 이미지를 올려도 현재 EKS Pod의 버전은 바뀌지 않는다
 현재 workflow는 매니페스트 수정, Argo CD Sync, Blue-Green 승격을 수행하지 않는다.
 
 1. GitHub Actions 성공과 Harbor의 새 SHA 태그를 확인한다.
-2. BE·AI는 비운영 slot의 이미지 태그만 변경한다. FE는 `k8s/frontend/kustomization.yaml`의 이미지 태그를 변경한다.
+2. 현재 개발 모드에서는 활성 BE Green·AI Blue의 이미지 태그를 변경한다. FE는 `k8s/frontend/kustomization.yaml`의 이미지 태그를 변경한다.
 3. Git에 반영하고 해당 Argo CD Application을 Sync한다.
-4. 검증 후 별도 Git 변경으로 운영 Service의 slot을 전환한다.
+4. Rolling 완료와 API·화면을 검증한다. 개발 모드에서는 Service selector를 전환하지 않는다.
 5. DB는 백업과 PostgreSQL·확장 호환성을 먼저 확인하고 별도로 배포한다.
 
 통합 소스의 AI는 설비 조회 API를 제공한다. `k8s/`에 고정된 이전 이미지가 이 새 코드를 포함하는 것은 아니다.
 현재 이미지 목록과 배포 전 마이그레이션·새 태그 반영 순서는 [배포 안내](../k8s/README.md)를 따른다.
 키 없는 CI 통과는 실제 모델 호출이나 응답 품질 검증을 뜻하지 않는다.
+
+향후 운영 Blue-Green에서는 비활성 slot에 후보를 배포·검증하고 별도 Git 변경으로 Service를 전환한다.
+현재 개발 설정과 전환 절차는 배포 안내를 따른다.
 
 ## FE 실행 주소
 

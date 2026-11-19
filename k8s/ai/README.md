@@ -1,36 +1,38 @@
-# AI 서버 첫 배포와 수동 Blue-Green
+# AI 서버 첫 배포와 개발용 Rolling
 
-이 디렉터리의 고정 태그는 통합 전 일반 채팅 이미지다. 새 설비 조회 소스의 첫 배포에는
-[상위 배포 안내](../README.md)에 따라 새 main CI 이미지 태그를 사용한다. 아래 버전과 초기 연결은 복구된 설정의 상태를 설명한다.
+이번 최초 배포는 main CI가 검증·업로드한 설비 조회 이미지 `056c253`을 사용한다.
+DB와 BE·FE 반영 순서는 [상위 배포 안내](../README.md)를 따른다.
 
 Deployment 두 개와 내부 Service 두 개로 구성한다. Argo Rollouts나 추가 CRD는 사용하지 않는다.
-초기 운영은 Blue이며, 두 slot 모두 CI에서 빌드·검증·업로드한 아래 이미지를 사용한다.
+개발 중에는 Blue만 Pod 1개로 실행한다. Green은 향후 Blue-Green용으로 정의만 유지하며 Pod는 0개다.
+두 slot의 이미지 태그는 CI에서 빌드·검증·업로드한 아래 버전이다.
 
 ```text
-harbor.skala-us.com/u3-2/ai:67117a2d12d688e030080e4c20e965bcad85eb36
+harbor.skala-us.com/u3-2/ai:056c253625e73639604ab088ca475cfa675f61d7
 
 BE → ai:8001         → ai-blue  (초기 운영)
-     ai-preview:8001 → ai-green (초기 검증)
+     ai-preview:8001 → ai-green (개발 중 Pod 0개)
 ```
 
 AI는 ClusterIP Service로만 접근한다. 별도 AI Ingress는 만들지 않는다.
 팀 호스트의 `/api`, `/health`, `/` 경로는 BE·FE 배포에서 관리한다.
-BE의 내부 호출 주소는 `http://ai:8001`이다. 현재 통합 소스는 설비 조회 API를 사용하지만,
-이전에 고정된 이미지는 일반 채팅 API이므로 버전을 맞춰 배포해야 한다.
+BE의 내부 호출 주소는 `http://ai:8001`이다. 활성 BE Green도 같은 릴리스의 이미지로 검증한다.
 
 ## 구성
 
 | 파일 | 역할 |
 | --- | --- |
-| `deployment-blue.yaml` / `deployment-green.yaml` | slot별 Pod 1개, 환경 변수·자원·보안·상태 검사 |
+| `deployment-blue.yaml` | 활성 Blue 1개, RollingUpdate, 환경 변수·자원·보안·상태 검사 |
+| `deployment-green.yaml` | 비활성 Green 0개, 향후 Blue-Green용 |
 | `service.yaml` | 운영 `ai`와 검증 `ai-preview`의 slot 선택 |
 | `kustomization.yaml` | namespace `u3-2`, 이미지 별칭과 태그 관리 |
 
 - 운영 slot은 Service `ai`의 `spec.selector.slot`으로 판단한다. 초기값은 `blue`, preview는 `green`이다.
 - `ai-blue-image`, `ai-green-image` 별칭은 같은 Harbor 저장소에서 서로 다른 버전을 선택할 수 있다.
-- 각 Deployment는 `Recreate`다. 새 버전은 항상 비운영 slot에만 배포한다.
-- Pod당 request `100m / 128Mi`, limit `500m / 512Mi`다. 두 slot 합계는 request `200m / 256Mi`, limit `1 CPU / 1Gi`다.
-- 두 slot을 각각 1개로 유지한다. 이는 검증·복귀 준비이며 고가용성 복제본 구성은 별개다.
+- 활성 Blue는 `RollingUpdate`, `maxSurge: 1`, `maxUnavailable: 0`, `minReadySeconds: 5`다.
+  개발 중에는 활성 이미지 갱신 후 Sync 한 번으로 교체하며 Service selector는 바꾸지 않는다.
+- Pod당 request `100m / 128Mi`, limit `500m / 512Mi`다. 교체 중 새 Pod 1개의 자원이 추가된다.
+- 비활성 Green은 `Recreate`이며 0개다. `ai-preview`에 엔드포인트가 없는 것이 현재 설정에 맞다.
 - `linux/amd64`, UID/GID `10001`, 권한 상승 금지, capability 제거, `RuntimeDefault` seccomp, API 토큰 마운트 해제를 사용한다.
 - startup/readiness/liveness는 `/health`다. 정상 상태는 실제 모델 호출 성공이나 BE 연동을 보장하지 않는다.
 - 모델은 `gpt-4.1`, API 키는 `ai-secrets` Secret의 `OPENAI_API_KEY`에서 읽는다.
@@ -66,17 +68,30 @@ Argo CD → Applications → NEW APP에서 다음 값으로 생성한 뒤 수동
 
 ```bash
 kubectl --context u3-2 -n u3-2 rollout status deployment/ai-blue --timeout=180s
-kubectl --context u3-2 -n u3-2 rollout status deployment/ai-green --timeout=180s
 kubectl --context u3-2 -n u3-2 get pods,svc -l app=ai
 kubectl --context u3-2 -n u3-2 port-forward service/ai 18001:8001 --address 127.0.0.1
 ```
 
 별도 터미널에서 `curl --fail-with-body http://127.0.0.1:18001/health`를 실행한다.
-preview도 `service/ai-preview 18002:8001`로 포트 포워딩해 같은 방법으로 확인한다.
-실제 모델 호출은 사용료가 발생하므로 별도 승인된 검증에서 수행한다.
+Green은 0개이므로 preview 포트 포워딩은 사용하지 않는다.
+키 등록과 실제 모델 호출은 사용자 요청으로 보류했다. 키 없는 설비 별칭 조회와 BE 연동은 별도로 확인한다.
 첫 배포는 초기 기동이다. 무중단 전환은 이후 실제 트래픽 시험으로 검증한다.
 
-## 비운영 slot에 새 버전 배포
+## 개발 중 버전 교체
+
+1. AI CI의 검사·Harbor 업로드 성공과 새 전체 SHA 태그를 확인한다.
+2. `kustomization.yaml`의 `ai-blue-image` 태그를 갱신한다. Blue는 1개, Green은 0개, Service는 Blue를 유지한다.
+3. 설정 PR 병합 후 기존 `u3-2-ai`에서 Refresh → Sync → Synchronize한다.
+4. Blue의 rollout, `/health`, 설비 조회 응답과 BE 연동을 확인한다. 모델 연결·품질 검증은 키 등록 후 별도 수행한다.
+
+문제가 있으면 Blue의 이미지 태그를 이전 버전으로 되돌려 Git에 반영하고 Sync한다.
+교체 전후 API가 BE와 호환돼야 하며, readiness 성공만으로 처리 중인 요청의 무중단을 보장하지 않는다.
+Secret 환경 변수는 Pod 시작 시 읽힌다. 키 교체 후에는 활성 Pod의 계획된 교체와 검증이 필요하다.
+
+## 향후 수동 Blue-Green: 후보 배포
+
+운영 검증 시 각 slot의 전략을 `Recreate`로 맞추되 활성 Pod template은 유지한다.
+비활성 slot의 replicas를 1로 올려야 preview 검사·전환·복귀에 사용할 수 있다.
 
 1. Git과 실제 Service `ai`의 selector가 일치하는지 확인한다.
 
@@ -91,7 +106,7 @@ preview도 `service/ai-preview 18002:8001`로 포트 포워딩해 같은 방법�
 이 구성은 검증 결과를 자동 판정하거나 승인 없는 전환을 막는 컨트롤러를 포함하지 않는다.
 `/health` 200이나 Argo Healthy만으로 모델 또는 기능 검증을 대신하지 않는다.
 
-## 전환과 복귀
+## 향후 수동 Blue-Green: 전환과 복귀
 
 후보 검증 후 별도 Git 변경에서 `service.yaml`의 selector 두 개만 교환한다.
 Blue → Green이면 `ai`는 `green`, `ai-preview`는 `blue`를 선택한다.
@@ -108,5 +123,5 @@ kubectl --context u3-2 -n u3-2 get endpointslice -l kubernetes.io/service-name=a
 이전 slot이 준비돼 있어야 빠르게 복귀할 수 있으며, 외부 API 호출 결과는 트래픽 복귀로 취소되지 않는다.
 복귀 기간이 끝나면 이전 slot을 다음 후보 공간으로 재사용한다.
 
-Secret 환경 변수는 Pod 시작 시 읽힌다. 키 교체 후에는 비운영 slot부터 재생성·검증·전환한다.
+Blue-Green을 사용하는 운영 단계에서는 키 교체도 비운영 slot부터 재생성·검증·전환한다.
 `app=ai` 전체 Pod를 한 번에 삭제하지 않는다. 키가 폐기되면 이전 slot도 영향을 받는다.
