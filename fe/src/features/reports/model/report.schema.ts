@@ -8,7 +8,10 @@ export const emptyFields: ReportFields = {
   chartUrl: "",
   risk: "",
 };
-export const fieldLabels: Record<keyof ReportFields, string> = {
+export const fieldLabels: Record<
+  Exclude<keyof ReportFields, "maintenance">,
+  string
+> = {
   title: "보고서 제목",
   symptom: "이상 현상",
   cause: "추정 원인",

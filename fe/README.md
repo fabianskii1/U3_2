@@ -12,7 +12,7 @@ docker compose --env-file DB/.env up -d --build
 
 FE는 `http://127.0.0.1:5173`에서 열립니다. Nginx가 같은 origin의 `/api/` 요청을 Compose의 `be:8000`으로 전달합니다. `DB/.env`의 `FE_PORT`로 호스트 포트를 변경할 수 있습니다. Docker 빌드는 `VITE_API_MODE=remote`, `VITE_API_BASE_URL=/api`를 사용합니다.
 
-현재 BE에서 연결되는 화면은 계층·설비 상세·트렌드·알람 이력·보고서 목록/상세와 설비 ID 조회 채팅입니다. 울산CLX 플랜트, CUD-01 그룹, 펌프 6대와 센서 48개가 기준 데이터로 들어 있습니다. 알람·보고서는 데이터가 없으면 빈 목록으로 표시됩니다. 실시간 활성 알람, 알람 SSE, 보고서 작성·편집 및 채팅의 보고서 작업은 준비 중입니다.
+현재 BE에서 연결되는 화면은 계층·설비 상세·트렌드·알람 이력·보고서 목록/상세와 설비 ID 조회 채팅입니다. 울산CLX 플랜트, CUD-01 그룹, 펌프 6대와 센서 48개가 기준 데이터로 들어 있습니다. 알람·보고서는 데이터가 없으면 빈 목록으로 표시됩니다. 실시간 활성 알람, 알람 SSE 및 채팅의 보고서 서버 작업은 준비 중입니다. 보고서 상세는 1~5번 정비 양식으로 확장했으며 원격 모드의 생성·편집·확정은 이 브라우저에 저장합니다. 서버 저장 API는 아직 연결되지 않았습니다. [보고서 변경 내역](./REPORT_FRONTEND_CHANGES.md)을 참고하세요.
 
 ## 실행
 
@@ -76,7 +76,7 @@ VITE_API_BASE_URL=/api
 
 Vite의 `/api` 프록시는 로컬 BE의 8000 포트로 연결됩니다. 별도 원격 주소를 `VITE_API_BASE_URL`에 직접 지정할 경우 브라우저 origin에 대한 CORS 허용이 필요합니다. 원격 API 계약은 [BE API 명세](../plan/be-api.md)를 따르며, `src/shared/api/be-adapter.ts`에서 BE의 `snake_case` 응답을 현재 화면 모델로 변환합니다. 플랜트·그룹·설비·센서 ID는 문자열 코드이고, 나머지 DB `bigint` ID는 JSON 문자열로 받습니다. Mock 모드는 `VITE_API_MODE=mock npm run dev`로 사용할 수 있습니다.
 
-현재 원격 모드의 알람 화면은 `/api/alarms/history`를 1분 간격으로 조회하고, 설비 상세는 `/api/equipment/{equipment_id}`를 10초 간격으로 조회합니다. 상단 갱신 시각은 설비 상세에서는 해당 설비의 마지막 성공 조회 시각을 표시합니다. 활성 알람과 SSE는 아직 사용하지 않습니다. 보고서 생성·수정은 준비 중입니다. 채팅은 `/api/chat/sessions`와 `/api/chat/stream`을 통해 AI 설비 ID 조회에 연결됩니다. 서버의 센서 임계값이 없으면 기준선과 초과 판정을 표시하지 않습니다.
+현재 원격 모드의 알람 화면은 `/api/alarms/history`를 1분 간격으로 조회하고, 설비 상세는 `/api/equipment/{equipment_id}`를 10초 간격으로 조회합니다. 상단 갱신 시각은 설비 상세에서는 해당 설비의 마지막 성공 조회 시각을 표시합니다. 활성 알람과 SSE는 아직 사용하지 않습니다. 보고서 생성·수정은 1~5번 정비 양식을 사용해 이 브라우저에 저장하며 서버 저장 API는 미연결입니다. 채팅은 `/api/chat/sessions`와 `/api/chat/stream`을 통해 AI 설비 ID 조회에 연결됩니다. 서버의 센서 임계값이 없으면 기준선과 초과 판정을 표시하지 않습니다.
 
 아래 표는 **Mock 모드**의 기존 경로다. 원격 모드 경로와 요청·응답 형식은 [BE API 명세](../plan/be-api.md)를 따른다.
 

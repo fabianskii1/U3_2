@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { maintenanceReportSchema } from "./maintenance-report.ts";
 export const reportFieldsSchema = z.object({
   title: z.string().max(200),
   symptom: z.string().max(10000),
@@ -6,6 +7,7 @@ export const reportFieldsSchema = z.object({
   action: z.string().max(10000),
   chartUrl: z.string().max(1000),
   risk: z.string().max(10000),
+  maintenance: maintenanceReportSchema.optional(),
 });
 export const reportSchema = z.object({
   id: z.string(),

@@ -2,6 +2,8 @@ import { devtoolsOptions } from "../../../shared/lib/devtools.ts";
 import { create } from "zustand";
 import { devtools, persist, createJSONStorage } from "zustand/middleware";
 import { z } from "zod";
+import type { ReportSensor } from "../../../shared/api/contracts/maintenance-report.ts";
+import { invalidateCause } from "./maintenance-report.ts";
 import {
   emptyFields,
   reportFieldsSchema,
@@ -14,6 +16,7 @@ export type ReportDraft = {
   serverId?: string;
   equipmentId: string;
   values: ReportFields;
+  savedValues?: ReportFields;
   localRevision: number;
   savedRevision: number;
   serverVersion: number;
@@ -30,6 +33,7 @@ const persistedDraftSchema = z.object({
   savedRevision: z.number().int().nonnegative(),
   serverVersion: z.number().int().nonnegative(),
   updatedAt: z.string(),
+  savedValues: reportFieldsSchema.optional(),
 });
 type State = {
   activeReportId: string | null;
@@ -37,6 +41,13 @@ type State = {
   createDraft: (equipmentId: string, values?: Partial<ReportFields>) => string;
   openReport: (report: Report) => void;
   activate: (id: string) => void;
+  initializeMaintenance: (
+    id: string,
+    maintenance: NonNullable<ReportFields["maintenance"]>,
+  ) => void;
+  restoreSaved: (id: string) => void;
+  captureSensors: (id: string, sensors: ReportSensor[]) => void;
+  reopen: (id: string, reason: string) => void;
   patch: (
     id: string,
     patch: Partial<ReportFields>,
@@ -87,6 +98,97 @@ export const useReportDraftStore = create<State>()(
           return id;
         },
         activate: (id) => set({ activeReportId: id }),
+        initializeMaintenance: (id, maintenance) =>
+          set((s) => {
+            const d = s.drafts[id];
+            if (!d || d.values.maintenance) return s;
+            const values = { ...d.values, maintenance };
+            return {
+              drafts: {
+                ...s.drafts,
+                [id]: { ...d, values, savedValues: values },
+              },
+            };
+          }),
+        captureSensors: (id, sensors) =>
+          set((s) => {
+            const d = s.drafts[id];
+            const m = d?.values.maintenance;
+            if (!m || m.status === "confirmed" || m.original.kind === "example")
+              return s;
+            const captured = m.original.sensors.map((sensor) =>
+              sensor.points
+                ? sensor
+                : (sensors.find(
+                    (row) => row.id === sensor.id && row.points?.length,
+                  ) ?? sensor),
+            );
+            if (captured.every((row, i) => row === m.original.sensors[i]))
+              return s;
+            const original = { ...m.original, sensors: captured };
+            const values = { ...d.values, maintenance: { ...m, original } };
+            const savedValues = d.savedValues?.maintenance
+              ? {
+                  ...d.savedValues,
+                  maintenance: { ...d.savedValues.maintenance, original },
+                }
+              : d.savedValues;
+            return {
+              drafts: { ...s.drafts, [id]: { ...d, values, savedValues } },
+            };
+          }),
+        restoreSaved: (id) =>
+          set((s) => {
+            const d = s.drafts[id];
+            if (!d?.savedValues) return s;
+            return {
+              drafts: {
+                ...s.drafts,
+                [id]: {
+                  ...d,
+                  values: d.savedValues,
+                  localRevision: d.savedRevision,
+                  saveStatus: "idle",
+                  error: undefined,
+                },
+              },
+            };
+          }),
+        reopen: (id, reason) =>
+          set((s) => {
+            const d = s.drafts[id];
+            const m = d?.values.maintenance;
+            if (!m || m.status !== "confirmed" || !reason.trim()) return s;
+            const { revisions, ...snapshot } = m;
+            const maintenance = {
+              ...m,
+              status: "draft" as const,
+              confirmedAt: null,
+              diagnosis: {
+                ...m.diagnosis,
+                final: { ...m.diagnosis.final, confirmedAt: null },
+              },
+              revisions: [
+                ...revisions,
+                {
+                  at: new Date().toISOString(),
+                  reason: reason.trim(),
+                  snapshot: JSON.stringify(snapshot),
+                },
+              ],
+            };
+            return {
+              drafts: {
+                ...s.drafts,
+                [id]: {
+                  ...d,
+                  values: { ...d.values, maintenance },
+                  localRevision: d.localRevision + 1,
+                  updatedAt: new Date().toISOString(),
+                },
+              },
+            };
+          }),
         openReport: (report) =>
           set((s) => ({
             activeReportId: report.id,
@@ -97,6 +199,7 @@ export const useReportDraftStore = create<State>()(
                   [report.id]: {
                     ...report,
                     serverId: report.id,
+                    savedValues: report.values,
                     localRevision: 0,
                     savedRevision: 0,
                     serverVersion: report.version,
@@ -110,6 +213,26 @@ export const useReportDraftStore = create<State>()(
           const patch = validated.data;
           const draft = get().drafts[id];
           if (!draft) return false;
+          if (draft.values.maintenance?.status === "confirmed") return false;
+          if (
+            patch.maintenance &&
+            draft.values.maintenance &&
+            JSON.stringify(patch.maintenance.original) !==
+              JSON.stringify(draft.values.maintenance.original)
+          )
+            return false;
+          if (
+            !patch.maintenance &&
+            patch.symptom !== undefined &&
+            draft.values.maintenance
+          )
+            patch.maintenance = invalidateCause({
+              ...draft.values.maintenance,
+              observations: {
+                ...draft.values.maintenance.observations,
+                symptoms: patch.symptom,
+              },
+            });
           if (
             baseRevision !== undefined &&
             draft.localRevision !== baseRevision
@@ -161,6 +284,7 @@ export const useReportDraftStore = create<State>()(
                   ...draft,
                   serverId: report.id,
                   savedRevision: revision,
+                  savedValues: report.values,
                   serverVersion: report.version,
                   saveStatus: "idle",
                   error: undefined,
@@ -188,6 +312,7 @@ export const useReportDraftStore = create<State>()(
                 serverId: report.id,
                 equipmentId: report.equipmentId,
                 values: report.values,
+                savedValues: report.values,
                 localRevision: 0,
                 savedRevision: 0,
                 serverVersion: report.version,

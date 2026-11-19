@@ -40,7 +40,10 @@ export async function flushReport(
         .markError(
           id,
           errorMessage(error),
-          axios.isAxiosError(error) && error.response?.status === 409,
+          (axios.isAxiosError(error) && error.response?.status === 409) ||
+            (error instanceof Error &&
+              "code" in error &&
+              error.code === "BROWSER_REPORT_CONFLICT"),
         );
       throw error;
     }
@@ -60,6 +63,7 @@ export function startAutosave(client: QueryClient, delay = 800) {
   const schedule = () => {
     for (const [id, d] of Object.entries(store.getState().drafts)) {
       if (
+        !!d.values.maintenance ||
         d.localRevision === d.savedRevision ||
         d.saveStatus === "saving" ||
         d.saveStatus === "error" ||
@@ -71,7 +75,8 @@ export function startAutosave(client: QueryClient, delay = 800) {
         id,
         setTimeout(() => {
           timers.delete(id);
-          void flushReport(id, client).catch(() => {});
+          if (!store.getState().drafts[id]?.values.maintenance)
+            void flushReport(id, client).catch(() => {});
         }, delay),
       );
     }
@@ -92,7 +97,11 @@ export function startAutosave(client: QueryClient, delay = 800) {
       for (const timer of timers.values()) clearTimeout(timer);
       timers.clear();
       for (const [id, d] of Object.entries(store.getState().drafts))
-        if (d.localRevision !== d.savedRevision && d.saveStatus !== "conflict")
+        if (
+          !d.values.maintenance &&
+          d.localRevision !== d.savedRevision &&
+          d.saveStatus !== "conflict"
+        )
           void flushReport(id, client).catch(() => {});
     },
     stop: () => {

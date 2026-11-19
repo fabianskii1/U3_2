@@ -57,9 +57,9 @@ export function buildChatContext(
       from: params.get("from") ?? range.from,
       to: params.get("to") ?? range.to,
     },
-    reportContext: draft?.serverId
+    reportContext: draft
       ? {
-          reportId: draft.serverId,
+          reportId: draft.serverId ?? draft.id,
           equipmentId: draft.equipmentId,
           localRevision: draft.localRevision,
           values: draft.values,
