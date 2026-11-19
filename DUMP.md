@@ -39,7 +39,7 @@ TimescaleDB 내부 테이블(`continuous_agg` 등)의 순환 외래 키 경고�
 
 ```bash
 ls -lh DB/dump/*.dump
-dump_file="DB/dump/skadi_20261119_add_trend_view.dump"
+dump_file="DB/dump/skadi_20261119_161433.dump"
 test -f "$dump_file" || { echo "덤프 파일이 없습니다: $dump_file" >&2; exit 1; }
 
 docker compose --env-file DB/.env up -d db

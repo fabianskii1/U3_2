@@ -77,7 +77,11 @@ alarm = Table(
     text("user_message"),
     Column("is_active", Boolean, nullable=True),
     Column("cof_score", Float, nullable=True),
+    Column("incident_id", String(64), ForeignKey("incident.incident_id"), nullable=True),
+    Column("peak_level", Integer, nullable=True),
     CheckConstraint("alarm_level BETWEEN 0 AND 4", name="alarm_level_range"),
+    CheckConstraint("peak_level BETWEEN 0 AND 4", name="alarm_peak_level_range"),
+    Index("ix_alarm_incident", "incident_id"),
     CheckConstraint("cof_score > '-Infinity' AND cof_score < 'Infinity'", name="alarm_cof_finite"),
 )
 
