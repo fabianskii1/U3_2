@@ -6,6 +6,11 @@ on:
     paths:
       - AI/**
       - .github/workflows/build-ai.yaml
+  pull_request:
+    branches: [main]
+    paths:
+      - AI/**
+      - .github/workflows/build-ai.yaml
   workflow_dispatch:
 
 permissions:
@@ -16,7 +21,6 @@ env:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -57,10 +61,11 @@ jobs:
           push: false
           tags: ${{ env.AI_IMAGE }}
 
-      - name: Test AI startup and missing-key response
+      - name: Test AI startup and keyless equipment lookup
         run: bash AI/deploy/ci-smoke.sh "$AI_IMAGE"
 
       - name: Log in to Harbor
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: harbor.skala-us.com
@@ -68,4 +73,5 @@ jobs:
           password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Push tested AI image
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: docker push "$AI_IMAGE"

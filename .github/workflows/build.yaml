@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - BE/**
+      - AI/workflow/**
+      - .github/workflows/build.yaml
+  pull_request:
+    branches: [main]
+    paths:
+      - BE/**
+      - AI/workflow/**
       - .github/workflows/build.yaml
   workflow_dispatch:
 
@@ -16,7 +23,6 @@ env:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -82,6 +88,7 @@ jobs:
         with:
           context: ./BE
           file: ./BE/deploy/Dockerfile
+          build-contexts: agent_workflow=./AI/workflow
           platforms: linux/amd64
           load: true
           push: false
@@ -93,6 +100,7 @@ jobs:
         run: bash BE/deploy/ci-smoke.sh "$BE_IMAGE" "$CI_NETWORK"
 
       - name: Log in to Harbor
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: harbor.skala-us.com
@@ -100,4 +108,5 @@ jobs:
           password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Push tested backend image
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: docker push "$BE_IMAGE"

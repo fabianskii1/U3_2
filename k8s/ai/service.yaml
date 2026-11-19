@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai
+  labels:
+    app: ai
+    role: active
+spec:
+  type: ClusterIP
+  selector:
+    app: ai
+    slot: blue
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-preview
+  labels:
+    app: ai
+    role: preview
+spec:
+  type: ClusterIP
+  selector:
+    app: ai
+    slot: green
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http

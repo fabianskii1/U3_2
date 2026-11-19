@@ -76,6 +76,8 @@ services:
       dockerfile: deploy/Dockerfile
       args:
         VITE_API_MODE: remote
+    environment:
+      BACKEND_UPSTREAM: be:8000
     ports:
       - "127.0.0.1:${FE_PORT:-5173}:80"
     depends_on:

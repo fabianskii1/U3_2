@@ -4,5 +4,7 @@ dist
 .data-e2e
 playwright-report
 test-results
-.env.local
+**/.env*
+**/*.env
+**/*.env.*
 *.tsbuildinfo

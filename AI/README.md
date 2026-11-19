@@ -32,10 +32,23 @@ Content-Type: application/json
 
 ```bash
 cd AI
-uv sync --python 3.12
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8001
-uv run ruff check app tests
-uv run pytest -q
+uv sync --frozen --group dev --python 3.12
+uv run --frozen --no-sync uvicorn app.main:app --host 127.0.0.1 --port 8001
+uv run --frozen --no-sync ruff check app tests
+uv run --frozen --no-sync pytest -q
 ```
 
 Compose에서는 프로젝트 루트에서 `docker compose --env-file DB/.env up -d --build`를 실행한다. AI API는 내부 서비스이며 FE는 BE의 채팅 API에 연결한다.
+
+## 이미지 검증과 CI
+
+프로젝트 루트에서 운영 이미지와 키 없는 설비 조회를 검증한다. Dockerfile과 CI는 `uv==0.12.13`을 사용한다.
+
+```bash
+docker buildx build --platform linux/amd64 --load -f AI/deploy/Dockerfile -t skadi-ai:check AI
+bash AI/deploy/ci-smoke.sh skadi-ai:check
+```
+
+스모크 테스트는 외부 네트워크와 호스트 환경 파일을 연결하지 않은 임시 컨테이너에서 `/health`, DB 후보의 정확한 별칭 일치, 빈 후보의 `not_found`, 유사 표현을 판별할 때 키가 없으면 반환하는 HTTP 503 `MODEL_CONFIG_MISSING`을 확인한다. 실제 모델 호출이나 API 키는 필요하지 않다.
+
+`build-ai.yaml`은 관련 경로의 main push, main 대상 PR, 수동 실행에서 Ruff·전체 pytest·amd64 이미지 빌드·스모크를 수행한다. Harbor 로그인과 검증한 SHA 태그 이미지 업로드는 PR이 아닌 main 실행에서만 수행한다.

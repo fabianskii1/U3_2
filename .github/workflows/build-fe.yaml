@@ -6,6 +6,11 @@ on:
     paths:
       - fe/**
       - .github/workflows/build-fe.yaml
+  pull_request:
+    branches: [main]
+    paths:
+      - fe/**
+      - .github/workflows/build-fe.yaml
   workflow_dispatch:
 
 permissions:
@@ -16,7 +21,6 @@ env:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -66,6 +70,7 @@ jobs:
         run: bash fe/deploy/ci-smoke.sh "$FE_IMAGE"
 
       - name: Log in to Harbor
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: harbor.skala-us.com
@@ -73,4 +78,5 @@ jobs:
           password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Push tested frontend image
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: docker push "$FE_IMAGE"

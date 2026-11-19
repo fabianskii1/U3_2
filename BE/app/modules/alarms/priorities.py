@@ -81,7 +81,7 @@ async def get_alarm_priorities(
     summary = results[0]
     items = [
         {
-            **serialize({key: row[key] for key in top.c.keys()}),
+            **serialize({column.key: row[column.key] for column in top.c}),
             "reason": row["user_message"],
         }
         for row in results

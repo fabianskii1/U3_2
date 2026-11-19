@@ -1,6 +1,7 @@
 """Chat bridge contract against the local PostgreSQL schema."""
 
 import json
+from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.database import engine, get_session
 from app.db import models as m
 from app.main import app
@@ -22,6 +24,49 @@ def event_data(stream: str, event_name: str) -> list[dict]:
         for frame in stream.split("\n\n")
         if frame.startswith(prefix)
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("base_url", "force_secure", "expected_secure"),
+    [("http://test", None, False), ("https://test", None, True), ("http://test", "true", True)],
+)
+async def test_chat_cookie_can_require_secure_behind_http_ingress(
+    monkeypatch, base_url, force_secure, expected_secure
+):
+    monkeypatch.delenv("FORCE_SECURE_CHAT_COOKIE", raising=False)
+    if force_secure is not None:
+        monkeypatch.setenv("FORCE_SECURE_CHAT_COOKIE", force_secure)
+    get_settings.cache_clear()
+    async with engine.connect() as connection:
+        transaction = await connection.begin()
+        db = AsyncSession(
+            bind=connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
+        )
+
+        async def test_session():
+            yield db
+
+        app.dependency_overrides[get_session] = test_session
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url=base_url
+            ) as client:
+                response = await client.post("/api/chat/sessions", json={})
+                assert response.status_code == 201
+                cookies = SimpleCookie(response.headers["set-cookie"])
+                cookie = cookies[chat_router.COOKIE_NAME]
+                assert bool(cookie["secure"]) is expected_secure
+                assert cookie["httponly"]
+                assert cookie["samesite"] == "lax"
+                assert cookie["path"] == "/api/chat"
+                assert cookie.value.startswith(f"{response.json()['session_id']}:")
+        finally:
+            app.dependency_overrides.clear()
+            get_settings.cache_clear()
+            await db.close()
+            await transaction.rollback()
+    await engine.dispose()
 
 
 @pytest.mark.asyncio
