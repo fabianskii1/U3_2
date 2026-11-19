@@ -115,6 +115,7 @@ async def create_trend_view(db: AsyncSession, payload: TrendViewCreate) -> tuple
             insert(trend_view)
             .values(
                 session_id=payload.sessionId,
+                session_detail_id=payload.messageId,
                 plant_id=plant_id,
                 equipment_group_id=group_id,
                 equipment_id=payload.equipmentId,
