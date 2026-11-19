@@ -119,3 +119,41 @@ test("기타 원인 직접 입력·후보별 검증·센서 필터와 시간 범
   await expect(page.getByRole("alert")).toContainText("조회 기간");
   expect(await toggles.count()).toBeGreaterThan(0);
 });
+
+test("보고서 끝까지 내려도 전체 페이지 아래에 빈 공간이 생기지 않는다", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1280, height: 900 },
+    { width: 1490, height: 880 },
+    { width: 1680, height: 1050 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/reports/new?sample=1");
+    await expect(page.locator(".mr-chart-canvas")).toHaveCount(3);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollHeight))
+      .toBe(viewport.height);
+    await page.getByRole("button", { name: "수정", exact: true }).click();
+    await page.getByRole("button", { name: "현장 점검 추가" }).click();
+    const scrollArea = page.locator(".page-scroll");
+    await scrollArea.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect(
+      page.getByRole("heading", { name: "출처 및 기록 검토", exact: true }),
+    ).toBeVisible();
+    expect(
+      await scrollArea.evaluate((element) => element.scrollTop),
+    ).toBeGreaterThan(0);
+    await page.evaluate(() =>
+      window.scrollTo(0, document.documentElement.scrollHeight),
+    );
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollHeight),
+    ).toBe(viewport.height);
+    expect((await page.locator(".app-header").boundingBox())?.y).toBe(0);
+    await expect(page.locator(".app-footer")).toBeVisible();
+  }
+});

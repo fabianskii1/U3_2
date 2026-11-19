@@ -1,5 +1,7 @@
 /* Report-only styles. The shared header, asset explorer and assistant stay intact. */
 .maintenance-report {
+  /* Contain absolute accessibility labels within the report's scroll area. */
+  position: relative;
   container-type: inline-size;
   padding-top: 17px;
   gap: 0;
