@@ -11,6 +11,7 @@ from sqlalchemy.pool import NullPool
 from app.config import get_settings
 from app.database import get_session
 from app.db import models as m
+from app.modules.alarms.models import setpoint
 from app.main import app
 
 KST = timezone(timedelta(hours=9))
@@ -94,6 +95,40 @@ async def test_trend_raw_hour_day_and_split_current_voltage_sensors():
                     for signal_id, value in (("TEST-TREND-IT", 10.0), ("TEST-TREND-ET", 380.0))
                 ],
             )
+            await connection.execute(insert(setpoint), [
+                {
+                    "setpoint_id": "TEST-TREND-FIXED",
+                    "equipment_id": "TEST-TREND-PUMP",
+                    "sensor_id": "TEST-TREND-TT",
+                    "signal_id": "TEST-TREND-TT",
+                    "alarm_level": 2,
+                    "direction": "HIGH",
+                    "operator": ">=",
+                    "calculation_type": "FIXED",
+                    "parameter": 5.0,
+                    "reference": None,
+                    "unit": "°C",
+                    "filter_minutes": 3,
+                    "effective_from": datetime(2026, 1, 1, tzinfo=KST),
+                    "effective_to": None,
+                },
+                {
+                    "setpoint_id": "TEST-TREND-DYNAMIC",
+                    "equipment_id": "TEST-TREND-PUMP",
+                    "sensor_id": "TEST-TREND-TT",
+                    "signal_id": "TEST-TREND-TT",
+                    "alarm_level": 1,
+                    "direction": "HIGH",
+                    "operator": ">=",
+                    "calculation_type": "EXPECTED_OFFSET",
+                    "parameter": 10.0,
+                    "reference": "E_TB",
+                    "unit": "°C",
+                    "filter_minutes": 3,
+                    "effective_from": datetime(2026, 1, 1, tzinfo=KST),
+                    "effective_to": None,
+                },
+            ])
 
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
@@ -107,6 +142,10 @@ async def test_trend_raw_hour_day_and_split_current_voltage_sensors():
                 assert [point["value"] for point in raw["points"]] == [2.0, 4.0, 6.0]
                 assert raw["signal_id"] == "TEST-TREND-TT"
                 assert raw["points"][0]["quality"] is None
+                assert {item["setpoint_id"]: item["value"] for item in raw["setpoints"]} == {
+                    "TEST-TREND-FIXED": 5.0,
+                    "TEST-TREND-DYNAMIC": None,
+                }
 
                 for interval in ("1h", "1d"):
                     grouped = (

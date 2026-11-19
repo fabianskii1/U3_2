@@ -16,6 +16,19 @@ const schema = z.object({
   direction: z.string(),
   max: z.number().nullable(),
   points: z.array(z.object({ time: z.string(), value: z.number().nullable() })),
+  setpoints: z
+    .array(
+      z.object({
+        setpoint_id: z.string(),
+        alarm_level: z.number().int().min(1).max(4),
+        direction: z.enum(["HIGH", "LOW"]),
+        operator: z.enum([">=", "<="]),
+        value: z.number().nullable(),
+        effective_from: z.string(),
+        effective_to: z.string().nullable(),
+      }),
+    )
+    .default([]),
 });
 export const trendQuery = (
   sensorId: string,
@@ -53,6 +66,7 @@ export const trendQuery = (
           null,
         ),
         points: raw.points,
+        setpoints: raw.setpoints,
       });
     },
     enabled:

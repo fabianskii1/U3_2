@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.query import serialize
+from app.modules.alarms.intake import get_initial_alarm_report
 from app.modules.alarms.models import alarm as alarm_table
 from app.modules.alarms.priorities import get_alarm_priorities
 from app.modules.chat.aliases import lookup_alias
@@ -47,6 +48,13 @@ async def _saved_alarm(db: AsyncSession, equipment_id: str, alarm_id: object) ->
     return serialize(row) if row else None
 
 
+async def _saved_initial_report(
+    db: AsyncSession, equipment_id: str, alarm_id: object
+) -> dict | None:
+    alarm = await _saved_alarm(db, equipment_id, alarm_id)
+    return await get_initial_alarm_report(db, int(alarm["alarm_id"])) if alarm else None
+
+
 async def run_chat_workflow(
     db: AsyncSession,
     message: str,
@@ -64,6 +72,7 @@ async def run_chat_workflow(
         get_equipment_sensors=partial(get_equipment_sensors, db),
         get_alarm_priorities=partial(get_alarm_priorities, db),
         get_alarm=partial(_saved_alarm, db),
+        get_initial_alarm_report=partial(_saved_initial_report, db),
         get_inspection_evidence=partial(get_inspection_evidence, db),
     )
     return await execute_workflow(tools, message, screen, previous)

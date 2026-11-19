@@ -212,6 +212,7 @@ export function DashboardPage({
               points={trend.points}
               limit={trend.limit}
               unit={trend.unit}
+              setpoints={trend.setpoints}
             />
           ) : (
             <LoadingState />

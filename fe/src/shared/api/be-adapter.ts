@@ -53,6 +53,7 @@ const alarm = z.object({
   equipment_id: id,
   sensor_id: id,
   alarm_type: z.string(),
+  event_type: z.enum(["예측", "임계치 초과"]).nullish(),
   alarm_start_time: z.string(),
   unit: z.string(),
   alarm_level: z.number().int().min(0).max(4),
@@ -85,6 +86,19 @@ export const beTrend = z.object({
   unit: z.string(),
   as_of: z.string(),
   threshold_value: z.number().nullable().optional(),
+  setpoints: z
+    .array(
+      z.object({
+        setpoint_id: z.string(),
+        alarm_level: z.number().int().min(1).max(4),
+        direction: z.enum(["HIGH", "LOW"]),
+        operator: z.enum([">=", "<="]),
+        value: z.number().nullable(),
+        effective_from: z.string(),
+        effective_to: z.string().nullable(),
+      }),
+    )
+    .default([]),
   points: z.array(
     z.object({
       time: z.string(),
@@ -148,6 +162,7 @@ export function mapAlarm(data: unknown, sensors: Hierarchy): Alarm {
     unit: raw.unit,
     occurredAt: raw.alarm_start_time,
     type: raw.alarm_type,
+    eventType: raw.event_type ?? undefined,
     reason: raw.user_message,
   };
 }

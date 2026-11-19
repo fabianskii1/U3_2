@@ -82,6 +82,20 @@ export function mockApi(): Plugin {
           interval,
           unit: sensor.unit,
           limit: sensor.limit,
+          setpoints:
+            sensor.limit == null
+              ? []
+              : [
+                  {
+                    setpoint_id: `MOCK-${sensor.id}-WARNING`,
+                    alarm_level: 2,
+                    direction: "HIGH",
+                    operator: ">=",
+                    value: sensor.limit,
+                    effective_from: "2000-01-01T00:00:00Z",
+                    effective_to: null,
+                  },
+                ],
           points,
           direction: "상승",
           max: Math.max(...points.map((p) => p.value)),

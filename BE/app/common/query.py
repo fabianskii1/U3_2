@@ -40,7 +40,7 @@ def decode_cursor(cursor: str) -> tuple[datetime | None, int]:
     try:
         payload = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
         row_id = payload["id"]
-        if not isinstance(row_id, int) or row_id < 1:
+        if type(row_id) is not int or not 1 <= row_id < 2**63:
             raise ValueError
         timestamp = datetime.fromisoformat(payload["time"]) if payload["time"] else None
         if timestamp and timestamp.tzinfo is None:

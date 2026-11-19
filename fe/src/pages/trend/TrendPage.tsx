@@ -452,10 +452,16 @@ function LegacyTrendPage({
               points={query.data.points}
               limit={query.data.limit}
               unit={query.data.unit}
+              setpoints={query.data.setpoints}
             />
             <div className="chart-legend">
               <span className="legend-line" /> 실측값{" "}
-              {query.data.limit !== null ? (
+              {query.data.setpoints.some((rule) => rule.value !== null) ? (
+                <>
+                  <span className="legend-line red-line" /> Setpoint 경계 · 색
+                  영역은 주의/경고/위험/비상
+                </>
+              ) : query.data.limit !== null ? (
                 <>
                   <span className="legend-line red-line" /> 기준값{" "}
                   <span className="muted">

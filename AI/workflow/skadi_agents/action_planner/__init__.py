@@ -22,6 +22,7 @@ def plan(reflection: Reflection) -> ActionPlan:
         "sensor_options": ("resolve_entity", "get_equipment_sensors", "build_link"),
         "alarm_history": ("resolve_entity", "build_link"),
         "alarm_priority": ("resolve_entity", "get_alarm_priorities"),
+        "initial_alarm_report": ("resolve_entity", "get_initial_alarm_report"),
         "trend": ("resolve_entity", "get_equipment_sensors", "build_link"),
         "inspection_evidence": ("resolve_entity", "get_inspection_evidence"),
         "maintenance_draft": (

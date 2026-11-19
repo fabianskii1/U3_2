@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.query import now, valid_range
 from app.database import get_session
 from app.modules.equipment.models import sensor
+from app.modules.alarms.models import setpoint
 from app.modules.telemetry.models import sensor_signal
 
 router = APIRouter(tags=["시계열"])
@@ -109,6 +110,7 @@ async def trend(
                 "points": [],
                 "as_of": now(),
                 "threshold_value": None,
+                "setpoints": [],
             }
         signal = signals[0]
 
@@ -131,6 +133,29 @@ async def trend(
         raise HTTPException(
             400, f"조회 지점은 최대 {MAX_POINTS:,}개입니다. 기간을 줄이거나 간격을 늘리세요."
         )
+    rules = (
+        (
+            await db.execute(
+                select(
+                    setpoint.c.setpoint_id,
+                    setpoint.c.alarm_level,
+                    setpoint.c.direction,
+                    setpoint.c.operator,
+                    setpoint.c.calculation_type,
+                    setpoint.c.parameter,
+                    setpoint.c.effective_from,
+                    setpoint.c.effective_to,
+                ).where(
+                    setpoint.c.signal_id == signal["signal_id"],
+                    setpoint.c.unit == signal["unit"],
+                    setpoint.c.effective_from < to_time,
+                    (setpoint.c.effective_to.is_(None) | (setpoint.c.effective_to > from_time)),
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
     return {
         "sensor_id": signal["sensor_id"],
         "signal_id": signal["signal_id"],
@@ -142,4 +167,16 @@ async def trend(
         ],
         "as_of": now(),
         "threshold_value": None,
+        "setpoints": [
+            {
+                "setpoint_id": rule["setpoint_id"],
+                "alarm_level": rule["alarm_level"],
+                "direction": rule["direction"],
+                "operator": rule["operator"],
+                "value": rule["parameter"] if rule["calculation_type"] == "FIXED" else None,
+                "effective_from": rule["effective_from"].isoformat(),
+                "effective_to": rule["effective_to"].isoformat() if rule["effective_to"] else None,
+            }
+            for rule in rules
+        ],
     }

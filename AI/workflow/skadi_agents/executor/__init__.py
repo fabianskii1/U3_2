@@ -4,6 +4,7 @@ import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from skadi_agents.action_planner import plan
@@ -33,6 +34,7 @@ class Toolset:
     get_alarm_priorities: Callable[..., Awaitable[dict]]
     get_alarm: Callable[[str, object], Awaitable[dict | None]]
     get_inspection_evidence: Callable[[str], Awaitable[InspectionEvidence]]
+    get_initial_alarm_report: Callable[[str, object], Awaitable[dict | None]]
 
 
 @dataclass
@@ -55,8 +57,10 @@ def _dates(days: int | None) -> dict[str, str]:
     return {"from": (today - timedelta(days=days - 1)).isoformat(), "to": today.isoformat()}
 
 
-def _trend_window(days: int, hours: int | None = None) -> dict[str, str]:
-    end = datetime.now(KST).replace(tzinfo=None, microsecond=0)
+def _trend_window(
+    days: int, hours: int | None = None, *, end: datetime | None = None
+) -> dict[str, str]:
+    end = (end or datetime.now(KST)).replace(tzinfo=None, microsecond=0)
     start = end - (timedelta(hours=hours) if hours else timedelta(days=days))
     return {"from": start.isoformat(), "to": end.isoformat(), "interval": "1h"}
 
@@ -66,8 +70,10 @@ def _trend_intent(
     sensor_ids: list[str],
     durations: list[timedelta],
     show_anomalies: bool = False,
+    *,
+    end: datetime | None = None,
 ) -> dict:
-    end = datetime.now(KST).replace(microsecond=0)
+    end = (end or datetime.now(KST)).replace(microsecond=0)
     return {
         "equipmentGroupId": entity.unit_id,
         "equipmentId": entity.id,
@@ -149,26 +155,41 @@ def _sensor_views(
     days: int,
     hours: int | None = None,
     show_anomalies: bool = False,
+    *,
+    historical_end: datetime | None = None,
+    alarm_context: dict | None = None,
 ) -> Reply:
-    window = _trend_window(days, hours)
+    window = _trend_window(days, hours, end=historical_end)
     if show_anomalies:
         window["show_anomalies"] = "1"
     period_label = f"{hours}시간" if hours else f"{days}일"
+    period_label = (
+        f"{historical_end:%Y-%m-%d %H:%M} KST 기준 {period_label}"
+        if historical_end
+        else f"최근 {period_label}"
+    )
     links = []
     for sensor in matches:
         sid = sensor["sensor_id"]
         label = f"{sensor['measurement_name']} ({sid}) " if len(matches) > 1 else ""
+        filters = {"sensor_id": sid}
+        if (
+            alarm_context
+            and sid == alarm_context.get("sensor_id")
+            and alarm_context.get("alarm_id")
+        ):
+            filters["alarm_id"] = alarm_context["alarm_id"]
         links.extend(
             [
-                _link(f"{label}설비 현황 열기", entity.link("/equip", sensor_id=sid)),
+                _link(f"{label}설비 현황 열기", entity.link("/equip", **filters)),
                 _link(
-                    f"{label}최근 {period_label} 트렌드 열기",
-                    entity.link("/trend", sensor_id=sid, **window),
+                    f"{label}{period_label} 트렌드 열기",
+                    entity.link("/trend", **filters, **window),
                 ),
             ]
         )
 
-    context = {"equipment_id": entity.id}
+    context = {**(alarm_context or {}), "equipment_id": entity.id}
     if len(matches) > 1:
         return Reply(
             f"**{markdown_text(entity.name)}**에 해당 센서가 여러 개 있습니다. 태그와 화면을 선택해 주세요.",
@@ -185,7 +206,7 @@ def _sensor_views(
     subject = markdown_text(f"{entity.name} · {sensor['measurement_name']}")
     return Reply(
         f"**{subject}** 데이터를 볼까요?\n\n"
-        f"최신 측정값은 **설비 현황**, 시간에 따른 변화는 **최근 {period_label} 트렌드**에서 볼 수 있습니다. "
+        f"최신 측정값은 **설비 현황**, 시간에 따른 변화는 **{period_label} 트렌드**에서 볼 수 있습니다. "
         "아래 링크를 누르거나 ‘설비 현황’, ‘트렌드’라고 답해 주세요.",
         links,
         context,
@@ -367,63 +388,154 @@ async def _resolve_target(
     return "not_found", []
 
 
+def _priority_time(value: str, now: datetime) -> datetime:
+    """Resolve explicit ISO or Korean local times without filling in a missing hour."""
+    value = re.sub(r"\s*KST$", "", value, flags=re.IGNORECASE).strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}.*", value):
+        parsed = datetime.fromisoformat(value)
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=KST)
+    match = re.fullmatch(
+        r"(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일"
+        r"\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?",
+        value,
+    )
+    if not match:
+        raise ValueError("missing date or time")
+    year, month, day, hour, minute = match.groups()
+    return datetime(
+        int(year or now.year), int(month), int(day), int(hour), int(minute or 0), tzinfo=KST
+    )
+
+
+def _alarm_date_label(value: str) -> str:
+    return datetime.fromisoformat(value).astimezone(KST).strftime("%Y-%m-%d %H:%M KST")
+
+
 async def _priority_reply(
-    tools: Toolset, entity: Entity | None, request: Reflection, previous: dict
+    tools: Toolset,
+    entity: Entity | None,
+    request: Reflection,
+    previous: dict,
+    comparison: list[Entity] | None = None,
 ) -> Reply:
-    snapshot = await tools.get_alarm_priorities(
-        **(entity.alarm_scope() if entity else {}), limit=1 if request.first_only else 3
-    )
+    query: dict = entity.alarm_scope() if entity else {}
     scope = entity.name if entity else "전체 설비"
-    as_of = (
-        datetime.fromisoformat(snapshot["as_of"]).astimezone(KST).strftime("%m월 %d일 %H:%M KST")
+    if comparison:
+        query["equipment_ids"] = [item.id for item in comparison]
+        scope = " · ".join(item.name for item in comparison)
+    if request.priority_time is not None:
+        now = datetime.now(KST)
+        try:
+            instant = _priority_time(request.priority_time, now)
+        except ValueError:
+            return Reply(
+                "알람 순위를 확인할 날짜와 시각을 알려주세요. 예를 들어 ‘2026년 11월 19일 14시 기준 알람 순위’라고 물어보세요.",
+                context=previous,
+            )
+        if instant > now:
+            return Reply(
+                "미래 시각의 알람 순위는 조회할 수 없습니다. 현재 또는 과거 시각을 알려주세요.",
+                context=previous,
+            )
+        query["as_of"] = instant
+    limit = 1 if request.first_only else 100 if request.priority_all else 3
+    snapshot = await tools.get_alarm_priorities(
+        **query, group_by=request.priority_group, limit=limit
     )
-    heading = f"**{markdown_text(scope)} 활성 Setpoint 알람** · {as_of} 기준"
+    label = "개별 알람 순위" if request.priority_group == "alarm" else "설비별 알람 순위"
+    heading = f"**{label} · {markdown_text(scope)}** · {_alarm_date_label(snapshot['as_of'])} 기준"
     history = entity.link("/alarms") if entity else "/alarms"
     items = snapshot["items"]
-    if not items:
-        explanation = {
-            "empty": "현재 조회 범위에 활성 Setpoint 알람이 없습니다.",
-            "unavailable": "활성 상태가 확인된 알람 데이터를 아직 조회할 수 없습니다.",
-            "unscored": "현재 활성 알람의 CoF 점수가 아직 평가되지 않았습니다.",
-        }.get(snapshot["status"], "현재 알람 우선순위를 확인할 수 없습니다.")
-        lines = [heading, explanation]
-        if snapshot["unscored_count"]:
-            lines.append(f"CoF 미평가 {snapshot['unscored_count']}건")
-        return Reply("\n\n".join(lines), [_link("알람 이력 보기", history)], previous)
-
-    lines = [
-        heading,
-        f"먼저 **{markdown_text(items[0]['equipment_name'])} · {markdown_text(items[0]['sensor_name'])}**을 확인하세요.",
-    ]
+    lines = [heading]
     links = []
+    if not items:
+        lines.append(
+            {
+                "empty": "조회 범위에 활성 Setpoint 알람이 0건입니다.",
+                "unavailable": "조회 범위에 이력이 있으나 활성 여부가 확인되지 않았습니다.",
+                "no_data": "조회 범위와 기준 시각에 해당하는 Setpoint 알람 이력이 없습니다.",
+                "unscored": "활성 알람의 CoF가 평가되지 않아 순위를 제시할 수 없습니다.",
+            }.get(snapshot["status"], "알람 우선순위를 확인할 수 없습니다.")
+        )
+    if snapshot["active_count"]:
+        lines.append(
+            f"활성 알람 {snapshot['active_count']}건 · 영향 설비 "
+            f"{snapshot['affected_equipment_count']}대 · 고유 조건 {snapshot['condition_count']}개"
+        )
+    severity = ("정상", "주의", "경고", "위험", "비상")
     for item in items:
         alarm_entity = Entity("equipment", item["equipment_id"], item["equipment_name"])
-        occurred = (
-            datetime.fromisoformat(item["alarm_start_time"])
-            .astimezone(KST)
-            .strftime("%m월 %d일 %H:%M KST")
-        )
         reason = f" · {markdown_text(item['reason'])}" if item.get("reason") else ""
+        event_type = markdown_text(item["event_type"] or "유형 미기록")
+        setpoint = (
+            f" · Setpoint {markdown_text(item['setpoint_id'])}" if item["setpoint_id"] else ""
+        )
         lines.append(
             f"{item['rank']}. **{markdown_text(item['equipment_name'])} · {markdown_text(item['sensor_name'])}**"
-            f" · CoF **{item['cof_score']:g}** · {occurred} 발생"
-            f"{reason}"
+            f" · {severity[item['alarm_level']]} · {event_type} · CoF **{item['cof_score']:g}**"
+            f" · {_alarm_date_label(item['alarm_start_time'])} 발생{setpoint}{reason}"
         )
+        if request.priority_group == "equipment":
+            lines.append(
+                f"   활성 {item['equipment_active_count']}건 · 예측 {item['prediction_count']}건"
+                f" · 임계치 초과 {item['threshold_exceeded_count']}건 · 고유 조건 {item['condition_count']}개"
+            )
         links.append(
             _link(
                 f"{item['rank']}순위 {item['equipment_name']} 확인",
                 alarm_entity.link("/equip", sensor_id=item["sensor_id"], alarm_id=item["alarm_id"]),
             )
         )
+    if comparison and items:
+        ranked_ids = {item["equipment_id"] for item in items}
+        excluded = [markdown_text(item.name) for item in comparison if item.id not in ranked_ids]
+        if excluded:
+            lines.append(f"순위에 포함되지 않은 비교 대상: {', '.join(excluded)}")
+    if request.priority_all and len(items) == limit == 100:
+        lines.append("조회 상한까지 상위 100개를 표시했습니다.")
     if snapshot["unscored_count"]:
         lines.append(f"CoF 미평가 {snapshot['unscored_count']}건")
     if snapshot["unknown_count"]:
         lines.append(f"활성 상태 미확인 이력 {snapshot['unknown_count']}건")
     links.append(_link("알람 이력 보기", history))
+    context = {
+        "alarm_priority_scope": entity.id if entity else None,
+        "alarm_priority_group": request.priority_group,
+    }
+    if comparison:
+        context["alarm_comparison_ids"] = [item.id for item in comparison]
+    if request.priority_time is not None:
+        context["alarm_as_of"] = snapshot["as_of"]
+    if items:
+        selected = items[0]
+        context.update(
+            {
+                key: selected[key]
+                for key in ("alarm_id", "equipment_id", "sensor_id", "has_initial_report")
+            }
+        )
+    return Reply("\n\n".join(lines), links, context)
+
+
+async def _initial_alarm_report_reply(
+    tools: Toolset, entity: Entity | None, previous: dict
+) -> Reply:
+    alarm_id = previous.get("alarm_id")
+    if (
+        not entity
+        or entity.kind != "equipment"
+        or not alarm_id
+        or entity.id != previous.get("equipment_id")
+    ):
+        return Reply("초기 보고서를 확인할 알람을 선택해 주세요.", context=previous)
+    report = await tools.get_initial_alarm_report(entity.id, alarm_id)
+    if report is None:
+        return Reply("선택한 알람에 저장된 초기 보고서가 없습니다.", context=previous)
+    created = _alarm_date_label(report["as_of"])
     return Reply(
-        "\n\n".join(lines),
-        links,
-        {key: items[0][key] for key in ("alarm_id", "equipment_id", "sensor_id")},
+        f"**저장된 초기 보고서** · {created} 생성\n\n{report['message']}",
+        report["links"],
+        previous,
     )
 
 
@@ -495,10 +607,26 @@ async def _show_equipment(
             context={"equipment_id": entity.id},
         )
     days = request.days or 7
+    historical_end = (
+        datetime.fromisoformat(previous["alarm_as_of"]).astimezone(KST)
+        if request.relative
+        and previous.get("alarm_as_of")
+        and previous.get("equipment_id") == entity.id
+        else None
+    )
     if request.intent == "sensor_options":
-        return _sensor_views(entity, matches, days, request.hours, request.show_anomalies)
+        return _sensor_views(
+            entity,
+            matches,
+            days,
+            request.hours,
+            request.show_anomalies,
+            historical_end=historical_end,
+            alarm_context=previous if historical_end else None,
+        )
     path = "/trend" if request.intent == "trend" else "/equip"
-    window = _trend_window(days, request.hours) if path == "/trend" else {}
+    duration = timedelta(hours=request.hours) if request.hours else timedelta(days=days)
+    window = _trend_window(days, request.hours, end=historical_end) if path == "/trend" else {}
     if len(matches) > 1 and (path == "/trend" or not generic or vibration_rms):
         links = [
             _link(
@@ -521,6 +649,10 @@ async def _show_equipment(
     )
     measurement = matches[0]["measurement_name"] if len(matches) == 1 else sensor_query
     period_label = f"최근 {request.hours}시간" if request.hours else f"최근 {days}일"
+    if historical_end:
+        period_label = (
+            f"{historical_end:%Y-%m-%d %H:%M} KST 기준 {period_label.removeprefix('최근 ')}"
+        )
     view = f"{period_label} 추이" if path == "/trend" else "현황"
     subject = f"{entity.name} {measurement} {view}"
     result_context = {"equipment_id": entity.id, **filters}
@@ -531,6 +663,8 @@ async def _show_equipment(
     ):
         result_context["alarm_id"] = alarm_id
         filters["alarm_id"] = alarm_id
+        if previous.get("alarm_as_of"):
+            result_context["alarm_as_of"] = previous["alarm_as_of"]
     href = entity.link(path, **filters, **window)
     action = " 그래프를 엽니다." if path == "/trend" else " 화면을 엽니다."
     return Reply(
@@ -542,8 +676,9 @@ async def _show_equipment(
             _trend_intent(
                 entity,
                 [matches[0]["sensor_id"]],
-                [timedelta(hours=request.hours) if request.hours else timedelta(days=days)],
+                [duration],
                 request.show_anomalies,
+                end=historical_end,
             )
             if path == "/trend" and len(matches) == 1
             else None
@@ -560,6 +695,19 @@ async def run_chat_workflow(
     if multi_reply := await _multi_trend_reply(tools, message, screen):
         return multi_reply
     request = reflect(message)
+    if "alarm_priority_scope" in previous and normalize(message.rstrip("?!.。")) in {
+        "전체순서",
+        "전체순서보여줘",
+        "전체순서알려줘",
+    }:
+        request = Reflection(
+            "alarm_priority",
+            target=previous["alarm_priority_scope"],
+            priority_all=True,
+            priority_time=previous.get("alarm_as_of"),
+            priority_group=previous.get("alarm_priority_group", "equipment"),
+            comparison_targets=tuple(previous.get("alarm_comparison_ids", ())),
+        )
     if request.intent == "out_of_scope":
         return Reply(
             "Skadi에서는 설비 현황, 센서 추이, 알람을 조회할 수 있어요. 예를 들어 ‘1호기 현황’이라고 물어보세요.",
@@ -580,6 +728,7 @@ async def run_chat_workflow(
             chosen_view,
             target=sensor_view["equipment_id"],
             sensor=sensor_view["sensor_id"],
+            relative="그설비" if previous.get("alarm_as_of") else None,
             days=request.days or sensor_view["days"],
             hours=request.hours or sensor_view.get("hours"),
         )
@@ -589,6 +738,9 @@ async def run_chat_workflow(
         if screen_alarm and (
             not screen.get("sensor_id") or screen["sensor_id"] == screen_alarm["sensor_id"]
         ):
+            if screen_alarm["alarm_id"] != previous.get("alarm_id"):
+                previous.pop("alarm_as_of", None)
+                previous.pop("has_initial_report", None)
             previous.update(
                 {key: screen_alarm[key] for key in ("equipment_id", "sensor_id", "alarm_id")}
             )
@@ -630,7 +782,27 @@ async def run_chat_workflow(
         return await _plant_units_reply(tools, request, screen, previous)
     intent = action.request.intent
     entity = None
-    needs_scope = request.target or request.relative
+    if request.comparison_targets:
+        candidates = []
+        for target in request.comparison_targets:
+            status, matches = await tools.resolve_entity(target, screen=screen, equipment_only=True)
+            if status != "found" or len(matches) != 1:
+                return Reply(
+                    f"비교 대상 ‘{markdown_text(target)}’을 하나로 확인할 수 없습니다. 설비 ID를 알려주세요.",
+                    context=previous,
+                )
+            candidates.append(matches[0])
+        if len({item.id for item in candidates}) < 2:
+            return Reply("비교할 서로 다른 설비를 지정해 주세요.", context=previous)
+        return await _priority_reply(tools, None, request, previous, candidates)
+    if intent == "initial_alarm_report" and not (request.target or previous.get("alarm_id")):
+        return await _initial_alarm_report_reply(tools, None, previous)
+    if intent == "initial_alarm_report" and not request.target:
+        request = replace(request, relative="그알람")
+    priority_screen_scope = intent == "alarm_priority" and any(
+        screen.get(key) for key in ("equipment_id", "equipment_group_id", "plant_id")
+    )
+    needs_scope = request.target or request.relative or priority_screen_scope
     if action.target_kind == "equipment_type" and selected is None:
         entities = await tools.equipment_of_type(request.target)
         if not entities:
@@ -644,7 +816,11 @@ async def run_chat_workflow(
     elif "resolve_entity" in action.tools and (
         needs_scope or intent not in {"alarm_history", "alarm_priority"}
     ):
-        equipment_only = intent in {"inspection_evidence", "maintenance_draft"}
+        equipment_only = intent in {
+            "inspection_evidence",
+            "maintenance_draft",
+            "initial_alarm_report",
+        }
         status, candidates = await _resolve_target(tools, request, screen, previous, equipment_only)
         if selected:
             candidates = [
@@ -655,15 +831,23 @@ async def run_chat_workflow(
             return _ask(request, status, candidates, previous)
         entity = candidates[0]
 
+    if "get_initial_alarm_report" in action.tools:
+        return await _initial_alarm_report_reply(tools, entity, previous)
     if "get_alarm_priorities" in action.tools:
         return await _priority_reply(tools, entity, request, previous)
     if intent == "alarm_history":
         filters = _dates(request.days)
         if request.relative and "알람" in request.relative and previous.get("sensor_id"):
             filters["sensor_id"] = previous["sensor_id"]
-        href = entity.link("/alarms", **filters) if entity else "/alarms"
-        if not entity and filters:
-            href = f"/alarms?from={filters['from']}&to={filters['to']}"
+        if request.alarm_event_type:
+            filters["event_type"] = request.alarm_event_type
+        href = (
+            entity.link("/alarms", **filters)
+            if entity
+            else f"/alarms?{urlencode(filters)}"
+            if filters
+            else "/alarms"
+        )
         scope = entity.name if entity else "전체 설비"
         context = previous
         if entity and entity.kind == "equipment" and entity.id != previous.get("equipment_id"):

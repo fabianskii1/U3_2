@@ -95,6 +95,7 @@ export function MultiTrendView({
                 points={query.data.points}
                 limit={query.data.limit}
                 unit={query.data.unit}
+                setpoints={query.data.setpoints}
               />
             )}
           </Card>

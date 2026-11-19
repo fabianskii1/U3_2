@@ -18,15 +18,16 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from sqlalchemy import insert, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as insert_postgres
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.query import serialize
 from app.config import get_settings
 from app.database import get_session
-from app.modules.alarms.models import alarm, alarm_intake
+from app.modules.alarms.models import alarm, alarm_intake, setpoint
 from app.modules.alarms.priorities import get_alarm_priorities
+from app.modules.alarms.schemas import AlarmEventType, AlarmIntakeResult
 from app.modules.chat.assets import Entity
 from app.modules.chat.evidence import build_maintenance_draft, get_inspection_evidence
 from app.modules.equipment.models import equipment, sensor
@@ -55,10 +56,17 @@ class AlarmEvent(BaseModel):
     user_message: str = Field(min_length=1, max_length=2000)
     cof_score: Measurement | None = None
     closes_source_event_id: SourceEventId | None = None
+    setpoint_id: SourceEventId | None = None
+    event_type: AlarmEventType | None = None
+    alarm_end_time: AwareDatetime | None = None
+    sensor_start_time: AwareDatetime | None = None
+    sensor_end_time: AwareDatetime | None = None
 
-    @field_validator("alarm_start_time")
+    @field_validator("alarm_start_time", "alarm_end_time", "sensor_start_time", "sensor_end_time")
     @classmethod
-    def normalize_time(cls, value: datetime) -> datetime:
+    def normalize_time(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
         if value.year < 2 or value > datetime.now(UTC):
             raise ValueError("유효한 알람 발생 시각을 입력해 주세요.")
         normalized = value.astimezone(UTC)
@@ -67,11 +75,21 @@ class AlarmEvent(BaseModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_close_event(self) -> "AlarmEvent":
+    def validate_event(self) -> "AlarmEvent":
         if self.closes_source_event_id and (
             self.is_active or self.closes_source_event_id == self.source_event_id
         ):
             raise ValueError("해제할 알람의 기존 이벤트 ID와 is_active=false가 필요합니다.")
+        if (self.setpoint_id is None) != (self.event_type is None):
+            raise ValueError("setpoint_id와 event_type은 함께 지정해야 합니다.")
+        if self.alarm_end_time and self.alarm_end_time < self.alarm_start_time:
+            raise ValueError("조치 완료 시각은 알람 시작 시각 이후여야 합니다.")
+        if self.sensor_start_time and self.sensor_start_time < self.alarm_start_time:
+            raise ValueError("센서 초과 시작 시각은 알람 시작 시각 이후여야 합니다.")
+        if self.sensor_end_time and (
+            not self.sensor_start_time or self.sensor_end_time < self.sensor_start_time
+        ):
+            raise ValueError("센서 복귀 시각에는 그 이전의 센서 초과 시작 시각이 필요합니다.")
         return self
 
 
@@ -101,8 +119,37 @@ async def _sensor_scope(db: AsyncSession, event: AlarmEvent) -> str:
     ).one_or_none()
     if asset is None:
         raise HTTPException(400, "설비에 속한 센서 태그를 지정해 주세요.")
-    if event.unit != asset.unit:
-        raise HTTPException(400, "알람 단위가 센서에 등록된 단위와 일치해야 합니다.")
+    if event.setpoint_id is None:
+        if event.unit != asset.unit:
+            raise HTTPException(400, "알람 단위가 센서에 등록된 단위와 일치해야 합니다.")
+        return asset.plant_id
+
+    rule_query = (
+        select(setpoint.c.alarm_level, setpoint.c.unit, sensor_signal.c.unit.label("signal_unit"))
+        .join(sensor_signal, setpoint.c.signal_id == sensor_signal.c.signal_id)
+        .where(
+            setpoint.c.setpoint_id == event.setpoint_id,
+            setpoint.c.equipment_id == event.equipment_id,
+            setpoint.c.sensor_id == event.sensor_id,
+            sensor_signal.c.sensor_id == event.sensor_id,
+        )
+    )
+    if event.closes_source_event_id is None:
+        rule_query = rule_query.where(
+            setpoint.c.effective_from <= event.alarm_start_time,
+            or_(
+                setpoint.c.effective_to.is_(None), setpoint.c.effective_to > event.alarm_start_time
+            ),
+        )
+    rule = (await db.execute(rule_query)).one_or_none()
+    if rule is None:
+        raise HTTPException(400, "발생 시점에 해당 설비와 센서에 유효한 setpoint가 필요합니다.")
+    if (
+        event.alarm_level != rule.alarm_level
+        or event.unit != rule.unit
+        or event.unit not in (asset.unit, rule.signal_unit)
+    ):
+        raise HTTPException(400, "알람 등급과 단위가 setpoint에 등록된 값과 일치해야 합니다.")
     return asset.plant_id
 
 
@@ -121,6 +168,7 @@ async def _close_alarm(db: AsyncSession, event: AlarmEvent) -> str | None:
                 alarm.c.alarm_id == source_alarm_id,
                 alarm.c.equipment_id == event.equipment_id,
                 alarm.c.sensor_id == event.sensor_id,
+                alarm.c.setpoint_id.is_not_distinct_from(event.setpoint_id),
                 alarm.c.is_active.is_(True),
                 alarm.c.alarm_start_time <= event.alarm_start_time,
             )
@@ -152,17 +200,13 @@ async def _recent_trend(
         summary["status"] = "out_of_range"
         return summary, None
     sensor_id = selected["sensor_id"]
-    signals = (
-        (
-            await db.execute(
-                select(sensor_signal.c.signal_id)
-                .where(sensor_signal.c.sensor_id == sensor_id)
-                .limit(2)
-            )
-        )
-        .scalars()
-        .all()
-    )
+    selected_setpoint = selected["setpoint_id"]
+    signal_query = select(sensor_signal.c.signal_id).where(sensor_signal.c.sensor_id == sensor_id)
+    if selected_setpoint is not None:
+        signal_query = signal_query.join(
+            setpoint, setpoint.c.signal_id == sensor_signal.c.signal_id
+        ).where(setpoint.c.setpoint_id == selected_setpoint)
+    signals = (await db.execute(signal_query.limit(2))).scalars().all()
     if len(signals) != 1:
         if signals:
             summary["status"] = "ambiguous"
@@ -228,6 +272,10 @@ async def _initial_report(db: AsyncSession, selected: dict, as_of: str) -> dict:
         "alarm_id": selected["alarm_id"],
         "equipment_id": entity.id,
         "sensor_id": selected["sensor_id"],
+        "setpoint_id": selected["setpoint_id"],
+        "event_type": selected["event_type"],
+        "alarm_start_time": selected["alarm_start_time"],
+        "cof_score": selected["cof_score"],
         "as_of": as_of,
         "message": (
             "**같은 플랜트의 CoF 평가 완료 활성 Setpoint 알람 중 1순위**\n\n"
@@ -238,13 +286,30 @@ async def _initial_report(db: AsyncSession, selected: dict, as_of: str) -> dict:
     }
 
 
-@router.post("/api/alarms/intake", status_code=201, dependencies=[Depends(_authenticate_monitor)])
+@router.post(
+    "/api/alarms/intake",
+    status_code=201,
+    dependencies=[Depends(_authenticate_monitor)],
+    responses={
+        201: {"model": AlarmIntakeResult, "description": "알람 저장"},
+        200: {"model": AlarmIntakeResult, "description": "기존 수신 결과 재전송"},
+        409: {"description": "이벤트 충돌"},
+    },
+)
 async def intake_alarm(
     event: AlarmEvent,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_session)],
 ):
-    digest = hashlib.sha256(event.model_dump_json().encode()).hexdigest()
+    optional_fields = {
+        "setpoint_id",
+        "event_type",
+        "alarm_end_time",
+        "sensor_start_time",
+        "sensor_end_time",
+    }
+    missing_fields = {field for field in optional_fields if getattr(event, field) is None}
+    digest = hashlib.sha256(event.model_dump_json(exclude=missing_fields).encode()).hexdigest()
     async with db.begin():
         inserted = (
             await db.execute(
@@ -268,20 +333,26 @@ async def intake_alarm(
             return existing.response
 
         plant_id = await _sensor_scope(db, event)
+        # Serialize writes and report selection within a plant, including concurrent clears.
+        await db.execute(select(func.pg_advisory_xact_lock(478431, func.hashtext(plant_id))))
         closed_alarm_id = await _close_alarm(db, event)
         alarm_row = (
             (
                 await db.execute(
-                    insert(alarm)
+                    insert_postgres(alarm)
                     .values(
-                        **event.model_dump(exclude={"source_event_id", "closes_source_event_id"})
+                        source_alarm_id=event.source_event_id,
+                        **event.model_dump(exclude={"source_event_id", "closes_source_event_id"}),
                     )
+                    .on_conflict_do_nothing(index_elements=[alarm.c.source_alarm_id])
                     .returning(*alarm.c)
                 )
             )
             .mappings()
-            .one()
+            .one_or_none()
         )
+        if alarm_row is None:
+            raise HTTPException(409, "이미 등록된 원본 알람 ID입니다.")
         priority = await get_alarm_priorities(db, plant_id=plant_id, limit=1)
         ranked = priority.pop("items")
         selected = ranked[0] if ranked else None
@@ -308,11 +379,7 @@ async def intake_alarm(
     return result
 
 
-@router.get("/api/alarms/{alarm_id}/initial-report")
-async def read_initial_report(
-    alarm_id: Annotated[int, Path(ge=1, le=2**63 - 1)],
-    db: Annotated[AsyncSession, Depends(get_session)],
-):
+async def get_initial_alarm_report(db: AsyncSession, alarm_id: int) -> dict | None:
     receipt = (
         await db.execute(
             select(alarm_intake.c.response)
@@ -321,6 +388,15 @@ async def read_initial_report(
             .limit(1)
         )
     ).scalar_one_or_none()
-    if receipt is None:
+    return receipt.get("initial_report") if receipt else None
+
+
+@router.get("/api/alarms/{alarm_id}/initial-report")
+async def read_initial_report(
+    alarm_id: Annotated[int, Path(ge=1, le=2**63 - 1)],
+    db: Annotated[AsyncSession, Depends(get_session)],
+):
+    report = await get_initial_alarm_report(db, alarm_id)
+    if report is None:
         raise HTTPException(404, "이 알람에 생성된 초기 보고서가 없습니다.")
-    return receipt["initial_report"]
+    return report

@@ -147,9 +147,10 @@ async def test_read_contract_with_uncommitted_sample_rows():
 
                 detail = (await client.get(f"/api/equipment/{equipment_id}")).json()
                 assert detail["sensors"][0]["current_value"] == 5.2
-                assert detail["sensors"][0]["measured_at"] == (
-                    telemetry_at + timedelta(minutes=1)
-                ).isoformat()
+                assert (
+                    detail["sensors"][0]["measured_at"]
+                    == (telemetry_at + timedelta(minutes=1)).isoformat()
+                )
                 assert detail["sensors"][0]["threshold_value"] is None
                 trend = (
                     await client.get(
@@ -211,6 +212,37 @@ async def test_read_contract_with_uncommitted_sample_rows():
                 assert priorities["items"][0]["alarm_id"] == first["items"][0]["alarm_id"]
                 assert priorities["items"][0]["cof_score"] == 80
                 assert priorities["items"][0]["rank"] == 1
+                assert priorities["affected_equipment_count"] == 1
+                assert priorities["condition_count"] == 1
+                assert priorities["items"][0]["equipment_active_count"] == 2
+
+                by_alarm = (
+                    await client.get(
+                        "/api/alarms/priorities",
+                        params={"equipment_id": equipment_id, "group_by": "alarm"},
+                    )
+                ).json()
+                assert [row["cof_score"] for row in by_alarm["items"]] == [80, 40]
+
+                await connection.execute(
+                    update(m.alarm)
+                    .where(m.alarm.c.equipment_id == equipment_id)
+                    .values(cof_score=80)
+                )
+                tied = (await client.get("/api/alarms/priorities", params=priority_params)).json()
+                assert tied["items"][0]["alarm_id"] == second["items"][0]["alarm_id"]
+
+                await connection.execute(
+                    update(m.alarm)
+                    .where(m.alarm.c.equipment_id == equipment_id)
+                    .values(cof_score=None)
+                )
+                unscored = (
+                    await client.get("/api/alarms/priorities", params=priority_params)
+                ).json()
+                assert unscored["status"] == "unscored"
+                assert unscored["active_count"] == unscored["unscored_count"] == 2
+                assert unscored["items"] == []
 
                 reports = (
                     await client.get(

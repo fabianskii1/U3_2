@@ -12,6 +12,7 @@ Intent = Literal[
     "sensor_options",
     "alarm_history",
     "alarm_priority",
+    "initial_alarm_report",
     "trend",
     "inspection_evidence",
     "maintenance_draft",
@@ -47,9 +48,11 @@ SENSOR_PHRASE = re.compile(
     r"(?:만|을|를)?$",
     re.IGNORECASE,
 )
-PRIORITY = re.compile(r"우선|순위|cof|뭐부터|어떤.*먼저|뭐\s*(?:봐|보|확인)|먼저", re.IGNORECASE)
+PRIORITY = re.compile(
+    r"우선|순위|순서|비교|cof|뭐부터|어떤.*먼저|뭐\s*(?:봐|보|확인)|먼저", re.IGNORECASE
+)
 ALARM_REQUEST = re.compile(
-    r"\s*(?:활성\s*)?알람(?:의|을|이|은)?(?=\s|$|이력|관련|데이터|현황|목록|뭐)"
+    r"\s*(?:활성\s*)?알람(?:의|을|이|은)?(?=\s|$|별|이력|관련|데이터|현황|목록|뭐)"
 )
 ALARM_REFERENCE = re.compile(r"^(?:이|그|해당)\s*알람(?:의)?(?=\s|$)")
 TREND = re.compile(TREND_TERMS)
@@ -82,6 +85,15 @@ PLANT_UNITS = re.compile(
 )
 PLANT_PARTICLE = re.compile(r"(?:에는|에서는|에서|에|의|은|는|이|가)$")
 PLANT_CONTEXT = {"", "현재", "지금", "여기", "이플랜트", "그플랜트", "이공장", "그공장"}
+ALARM_DATE = re.compile(
+    r"(?<!\d)(?:\d{4}\s*년\s*)?\d{1,2}\s*월\s*\d{1,2}\s*일"
+    r"(?:\s*\d{1,2}\s*시(?:\s*\d{1,2}\s*분)?)?(?:\s*KST)?"
+    r"|(?<!\d)\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?"
+    r"(?:Z|[+-]\d{2}:\d{2})?)?(?:\s*KST)?",
+    re.IGNORECASE,
+)
+PUMP_COMPARISON = re.compile(r"(?i)^P\d+\s*(?:과|와|,|·|\s+및\s+)\s*P\d+\s*비교$")
+ALARM_TYPES = re.compile(r"임계치\s*초과|예측")
 
 
 @dataclass(frozen=True)
@@ -96,6 +108,11 @@ class Reflection:
     selection: int | None = None
     hours: int | None = None
     show_anomalies: bool = False
+    priority_time: str | None = None
+    priority_group: Literal["equipment", "alarm"] = "equipment"
+    priority_all: bool = False
+    comparison_targets: tuple[str, ...] = ()
+    alarm_event_type: str | None = None
 
 
 def normalize(value: str) -> str:
@@ -147,12 +164,25 @@ def reflect(message: str) -> Reflection:
     if alias_request:
         subject = target[: alias_request.start()].strip()
         return Reflection("alias_lookup", target=subject or None)
-    if re.search(r"보고서|초안", target):
+    priority_time = None
+    priority_group = "equipment"
+    priority_all = False
+    comparison_targets = ()
+    alarm_event_type = None
+    if report := re.search(r"초기\s*보고서", target):
+        target = target[: report.start()].strip()
+        intent: Intent = "initial_alarm_report"
+    elif re.search(r"보고서|초안", target):
         target = re.split(r"\s*(?:정비\s*(?:조치\s*)?)?보고서|\s*초안", target, maxsplit=1)[0]
-        intent: Intent = "maintenance_draft"
+        intent = "maintenance_draft"
     elif re.search(r"점검\s*근거|매뉴얼|유사\s*사례", target):
         target = re.split(r"\s*(?:의\s+)?(?:점검\s*근거|매뉴얼|유사\s*사례)", target, maxsplit=1)[0]
         intent = "inspection_evidence"
+    elif PUMP_COMPARISON.fullmatch(target):
+        return Reflection(
+            "alarm_priority",
+            comparison_targets=tuple(re.findall(r"P\d+", target, re.IGNORECASE)),
+        )
     elif (alarm := ALARM_REQUEST.search(target)) and not (
         ALARM_REFERENCE.match(target) and TREND.search(target)
     ):
@@ -161,7 +191,30 @@ def reflect(message: str) -> Reflection:
             if PRIORITY.search(text) or re.fullmatch(r"(?:지금|현재)알람(?:을)?", compact)
             else "alarm_history"
         )
-        target = target[: alarm.start()].strip()
+        tail = target[alarm.end() :]
+        stem = target[: alarm.start()].strip()
+        if intent == "alarm_priority":
+            date = ALARM_DATE.search(target)
+            priority_time = (
+                date[0]
+                if date
+                else ""
+                if re.search(r"어제|그제|지난|과거|\d+\s*시", target)
+                else None
+            )
+            priority_group = "alarm" if re.search(r"개별|알람\s*별", target) else "equipment"
+            priority_all = bool(re.search(r"전체|모든", target))
+            stem = ALARM_DATE.sub(" ", stem)
+            stem = re.sub(r"기준(?:으로)?|개별|전체|모든|알람별", " ", stem).strip()
+            if "비교" in target:
+                targets = re.split(r"(?<=\S)[과와]\s+|\s+(?:및|그리고)\s+|[,·]", stem)
+                if len(targets) > 1:
+                    comparison_targets = tuple(item.strip() for item in targets)
+                    stem = ""
+        elif kind := ALARM_TYPES.search(target):
+            alarm_event_type = "예측" if kind[0] == "예측" else "임계치 초과"
+            stem = ALARM_TYPES.sub(" ", stem)
+        target = stem.strip()
         if target in {"이", "그", "해당"}:
             target += " 알람"
         else:
@@ -191,10 +244,15 @@ def reflect(message: str) -> Reflection:
 
     show_anomalies = bool(re.search(r"이상\s*(?:구간|치)", text))
     target = re.sub(r"이상\s*(?:구간|치)(?:을|를)?(?:\s*표시)?", " ", target).strip()
-    duration = re.search(r"(?<!\S)(?:최근\s*)?(\d{1,2})\s*(일|시간)(?=\s|$)", target)
-    amount = int(duration[1]) if duration and 1 <= int(duration[1]) <= 90 else None
-    days = amount if duration and duration[2] == "일" else None
-    hours = amount if duration and duration[2] == "시간" else None
+    duration_pattern = r"(?<!\S)(?:최근\s*)?(\d{1,2})\s*(일|시간)(?=\s|$)"
+    duration = re.search(duration_pattern, target)
+    history_duration = (
+        re.search(duration_pattern, tail) if intent == "alarm_history" and not duration else None
+    )
+    period = duration or history_duration
+    amount = int(period[1]) if period and 1 <= int(period[1]) <= 90 else None
+    days = amount if period and period[2] == "일" else None
+    hours = amount if period and period[2] == "시간" else None
     if duration:
         target = (target[: duration.start()] + target[duration.end() :]).strip()
     target, sensor, signal = _extract_sensor(target)
@@ -211,4 +269,9 @@ def reflect(message: str) -> Reflection:
         bool(re.search(r"(?<!\d)1\s*순위", text)),
         hours=hours,
         show_anomalies=show_anomalies,
+        priority_time=priority_time,
+        priority_group=priority_group,
+        priority_all=priority_all,
+        comparison_targets=comparison_targets,
+        alarm_event_type=alarm_event_type,
     )

@@ -27,6 +27,7 @@ export function AlarmListPage({
   const from = params.get("from") ?? range.from;
   const to = params.get("to") ?? range.to;
   const severity = params.get("severity") ?? "";
+  const eventType = params.get("event_type");
   const bounds = dateBounds(from, to);
   const valid = validDateRange(from, to);
   const filtered = !valid
@@ -38,6 +39,7 @@ export function AlarmListPage({
           (!selection.unitId || eq?.unitId === selection.unitId) &&
           (!selection.equipmentId || eq?.id === selection.equipmentId) &&
           (!severity || alarmFilterValue(a) === severity) &&
+          (!eventType || a.eventType === eventType) &&
           a.occurredAt >= new Date(bounds.from).toISOString() &&
           a.occurredAt <= new Date(bounds.to).toISOString()
         );
