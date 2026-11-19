@@ -29,6 +29,7 @@ export default defineConfig({
     env: {
       MOCK_DATA_DIR: ".data-e2e",
       VITE_CACHE_DIR: "node_modules/.vite-e2e",
+      VITE_API_MODE: "mock",
     },
   },
   reporter: "list",

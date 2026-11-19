@@ -80,6 +80,7 @@ export const hierarchy: Hierarchy = {
       id: `${plant.id}-P${process.number}`,
       name: `P${process.number} · ${process.name}`,
       plantId: plant.id,
+      processType: null,
     })),
   ),
   equipment: plants.flatMap((plant, plantIndex) =>

@@ -9,6 +9,7 @@ import {
   useTrendStore,
 } from "../../features/trend/index.ts";
 import { Card, CardHeader } from "../../shared/ui/card.tsx";
+import { PumpComparisonChart } from "../../features/trend/ui/PumpComparisonChart.tsx";
 import { Select } from "../../shared/ui/select.tsx";
 import { DateRangePicker } from "../../shared/ui/DateRangePicker.tsx";
 import { EmptyState } from "../../shared/ui/EmptyState.tsx";
@@ -35,6 +36,10 @@ export function TrendPage({
 }) {
   const [params, setParams] = useSearchParams();
   const eq = hierarchy.equipment.find((e) => e.id === selection.equipmentId);
+  const selectedGroup = hierarchy.units.find(
+    (unit) =>
+      unit.id === selection.unitId && unit.plantId === selection.plantId,
+  );
   const sensor =
     eq?.tags.find((t) => t.id === params.get("sensor_id")) ?? eq?.tags[0];
   const range = defaultRange();
@@ -83,78 +88,88 @@ export function TrendPage({
           <p>센서 신호의 변화와 기준 초과 구간을 확인하세요.</p>
         </div>
       </div>
-      <Card>
-        <div className="filter-bar">
-          <div className="inline">
-            <label htmlFor="trend-sensor" className="small muted">
-              센서
-            </label>
-            <Select
-              id="trend-sensor"
-              value={sensor?.id ?? ""}
-              disabled={!eq}
-              onChange={(e) => {
-                const p = new URLSearchParams(params);
-                p.set("sensor_id", e.target.value);
-                setParams(p);
-              }}
-            >
-              {!eq ? (
-                <option value="">설비를 먼저 선택하세요</option>
-              ) : (
-                eq.tags.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} · {t.id}
-                  </option>
-                ))
-              )}
-            </Select>
-          </div>
-          <div className="inline">
-            <label htmlFor="trend-interval" className="small muted">
-              조회 간격
-            </label>
-            <Select
-              id="trend-interval"
-              value={mode}
-              onChange={(e) => {
-                const p = new URLSearchParams(params);
-                p.set("interval", e.target.value);
-                setParams(p);
-              }}
-            >
-              <option value="auto">자동</option>
-              {!remoteApi && <option value="1s">1초</option>}
-              <option value="1m">1분</option>
-              <option value="1h">1시간</option>
-              <option value="1d">1일</option>
-            </Select>
-            {mode === "auto" && valid && (
-              <span className="small muted">
-                현재 {intervalLabel(interval)} 간격
-              </span>
-            )}
-          </div>
-          <DateRangePicker
-            withTime
-            from={bounds.inputFrom}
-            to={bounds.inputTo}
-            onChange={(f, t) => {
-              const p = new URLSearchParams(params);
-              p.set("from", f);
-              p.set("to", t);
-              setParams(p);
-            }}
-          />
-        </div>
-      </Card>
-      {!eq ? (
+      {eq && (
         <Card>
-          <EmptyState
-            title="분석할 설비를 선택하세요"
-            description="왼쪽 설비 탐색에서 설비를 선택하거나 대화에서 요청해 주세요."
-          />
+          <div className="filter-bar">
+            <div className="inline">
+              <label htmlFor="trend-sensor" className="small muted">
+                센서
+              </label>
+              <Select
+                id="trend-sensor"
+                value={sensor?.id ?? ""}
+                disabled={!eq}
+                onChange={(e) => {
+                  const p = new URLSearchParams(params);
+                  p.set("sensor_id", e.target.value);
+                  setParams(p);
+                }}
+              >
+                {!eq ? (
+                  <option value="">설비를 먼저 선택하세요</option>
+                ) : (
+                  eq.tags.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} · {t.id}
+                    </option>
+                  ))
+                )}
+              </Select>
+            </div>
+            <div className="inline">
+              <label htmlFor="trend-interval" className="small muted">
+                조회 간격
+              </label>
+              <Select
+                id="trend-interval"
+                value={mode}
+                onChange={(e) => {
+                  const p = new URLSearchParams(params);
+                  p.set("interval", e.target.value);
+                  setParams(p);
+                }}
+              >
+                <option value="auto">자동</option>
+                {!remoteApi && <option value="1s">1초</option>}
+                <option value="1m">1분</option>
+                <option value="1h">1시간</option>
+                <option value="1d">1일</option>
+              </Select>
+              {mode === "auto" && valid && (
+                <span className="small muted">
+                  현재 {intervalLabel(interval)} 간격
+                </span>
+              )}
+            </div>
+            <DateRangePicker
+              withTime
+              from={bounds.inputFrom}
+              to={bounds.inputTo}
+              onChange={(f, t) => {
+                const p = new URLSearchParams(params);
+                p.set("from", f);
+                p.set("to", t);
+                setParams(p);
+              }}
+            />
+          </div>
         </Card>
+      )}
+      {!eq ? (
+        selectedGroup && selection.plantId ? (
+          <PumpComparisonChart
+            hierarchy={hierarchy}
+            plantId={selection.plantId}
+            unitId={selectedGroup.id}
+          />
+        ) : (
+          <Card>
+            <EmptyState
+              title="Plant와 Equipment Group을 선택하세요"
+              description="왼쪽 설비 탐색 또는 상단 선택 메뉴에서 비교할 공정을 지정해 주세요."
+            />
+          </Card>
+        )
       ) : !valid ? (
         <ErrorState message="시작 일자와 종료 일자를 확인하세요." />
       ) : tooManyPoints ? (

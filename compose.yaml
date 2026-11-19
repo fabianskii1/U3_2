@@ -23,6 +23,8 @@ services:
     build:
       context: ./BE
       dockerfile: deploy/Dockerfile
+      additional_contexts:
+        agent_workflow: ./AI/workflow
     environment: &be_environment
       POSTGRES_DB: ${POSTGRES_DB:-skadi}
       POSTGRES_USER: ${POSTGRES_USER:-skadi}
@@ -39,9 +41,12 @@ services:
     build:
       context: ./BE
       dockerfile: deploy/Dockerfile
+      additional_contexts:
+        agent_workflow: ./AI/workflow
     environment:
       <<: *be_environment
       AI_BASE_URL: http://ai:8001
+      ALARM_INGEST_TOKEN: ${ALARM_INGEST_TOKEN:-}
     ports:
       - "127.0.0.1:${BE_PORT:-8000}:8000"
     depends_on:
@@ -56,7 +61,8 @@ services:
       context: ./AI
       dockerfile: deploy/Dockerfile
     env_file:
-      - ./AI/.env
+      - path: ./AI/.env
+        required: false
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2)"]
       interval: 10s
@@ -70,8 +76,6 @@ services:
       dockerfile: deploy/Dockerfile
       args:
         VITE_API_MODE: remote
-    environment:
-      BACKEND_UPSTREAM: be:8000
     ports:
       - "127.0.0.1:${FE_PORT:-5173}:80"
     depends_on:

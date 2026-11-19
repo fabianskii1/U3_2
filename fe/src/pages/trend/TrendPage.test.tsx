@@ -19,13 +19,18 @@ afterEach(() => {
   useTrendStore.getState().reset();
 });
 
-function renderTrend(search = "", equipmentId: string | null = "P-1101A") {
+function renderTrend(
+  search = "",
+  equipmentId: string | null = "P-1101A",
+  plantId: string | null = "P-01",
+  unitId: string | null = "P-01-P1",
+) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter initialEntries={[`/trend${search}`]}>
         <TrendPage
           hierarchy={hierarchy}
-          selection={{ plantId: "P-01", unitId: "P-01-P1", equipmentId }}
+          selection={{ plantId, unitId, equipmentId }}
         />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -109,4 +114,24 @@ it("설비 미선택 시 조회 대상을 비우고 잘못된 기간은 조회 �
     sensor_start_time: null,
     sensor_end_time: null,
   });
+});
+
+it("Plant 또는 Equipment Group이 없으면 비교 차트를 표시하지 않는다", () => {
+  const { unmount } = renderTrend("", null, null, null);
+  expect(screen.queryByText(/진동 비교/)).not.toBeInTheDocument();
+  expect(
+    screen.getByText("Plant와 Equipment Group을 선택하세요"),
+  ).toBeInTheDocument();
+  unmount();
+
+  renderTrend("", null, "P-01", null);
+  expect(screen.queryByText(/진동 비교/)).not.toBeInTheDocument();
+  expect(
+    screen.getByText("Plant와 Equipment Group을 선택하세요"),
+  ).toBeInTheDocument();
+});
+
+it("Plant와 Equipment Group을 선택하고 설비는 선택하지 않으면 비교 패널을 표시한다", () => {
+  renderTrend("", null);
+  expect(screen.getByText(/진동 비교/)).toBeInTheDocument();
 });

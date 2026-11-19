@@ -1,6 +1,6 @@
 # SKADI FE
 
-React + TypeScript 기반 회전기계설비 모니터링 FE입니다. 로컬 개발은 Mock 모드, Docker 배포는 BE 연결 모드입니다. 원격 채팅은 설비 ID 조회를 지원하며 로그인은 아직 구현하지 않았습니다.
+React + TypeScript 기반 회전기계설비 모니터링 FE입니다. 로컬 개발과 Docker 배포는 BE 연결 모드입니다. 원격 채팅은 설비 ID 조회를 지원하며 로그인은 아직 구현하지 않았습니다.
 
 ## Docker에서 BE와 함께 실행
 
@@ -12,19 +12,6 @@ docker compose --env-file DB/.env up -d --build
 
 FE는 `http://127.0.0.1:5173`에서 열립니다. Nginx가 같은 origin의 `/api/` 요청을 Compose의 `be:8000`으로 전달합니다. `DB/.env`의 `FE_PORT`로 호스트 포트를 변경할 수 있습니다. Docker 빌드는 `VITE_API_MODE=remote`, `VITE_API_BASE_URL=/api`를 사용합니다.
 
-이미지의 `BACKEND_UPSTREAM` 기본값은 EKS Service 이름에 맞춘 `backend:8000`입니다. Nginx 공식 이미지의 시작 템플릿으로 이 값을 적용하며, Compose는 `BACKEND_UPSTREAM=be:8000`을 설정합니다. `/api/` 경로와 쿼리 문자열을 그대로 전달하고 스트리밍 프록시 버퍼링은 끕니다.
-
-## 이미지 CI
-
-`.github/workflows/build-fe.yaml`은 `main`의 `fe/**` 변경 또는 `main`에서의 수동 실행에 동작합니다. Node.js 22에서 `npm ci`, Mock 모드의 전체 Vitest, 프로덕션 빌드를 통과한 뒤 `linux/amd64` 이미지를 만들고 실제 Nginx 컨테이너에서 정적 자산, SPA 새로고침, API 프록시와 upstream 설정 변경을 검사합니다. 검사가 모두 성공해야 기존 `HARBOR_USERNAME`/`HARBOR_PASSWORD`로 `harbor.skala-us.com/u3-2/frontend:<commit SHA>`를 게시합니다. 배포 중인 이미지 태그는 자동으로 변경하지 않습니다.
-
-동일한 이미지 검사를 로컬에서 실행하려면 프로젝트 루트에서 다음을 실행합니다. 테스트용 API는 같은 이미지의 Nginx로 만들고, 외부 연결이 없는 임시 Docker 네트워크와 컨테이너는 종료 시 삭제합니다.
-
-```bash
-docker buildx build --platform linux/amd64 --load -t skadi-fe-ci:local -f fe/deploy/Dockerfile fe
-bash fe/deploy/ci-smoke.sh skadi-fe-ci:local
-```
-
 현재 BE에서 연결되는 화면은 계층·설비 상세·트렌드·알람 이력·보고서 목록/상세와 설비 ID 조회 채팅입니다. 울산CLX 플랜트, CUD-01 그룹, 펌프 6대와 센서 48개가 기준 데이터로 들어 있습니다. 알람·보고서는 데이터가 없으면 빈 목록으로 표시됩니다. 실시간 활성 알람, 알람 SSE, 보고서 작성·편집 및 채팅의 보고서 작업은 준비 중입니다.
 
 ## 실행
@@ -32,20 +19,22 @@ bash fe/deploy/ci-smoke.sh skadi-fe-ci:local
 Node.js 22.12 이상 또는 이에 대응하는 최신 LTS와 npm을 사용합니다. 검증 환경은 Node.js 26입니다.
 
 ```bash
-cd fe
+cd FE
 npm ci
 npm run dev
 ```
 
 기본 주소는 `http://127.0.0.1:5173`입니다. 이 포트를 다른 프로그램이 사용하면 `npm run dev -- --port 5174`처럼 변경합니다. 데이터 복원은 같은 브라우저 프로필과 같은 origin에서 동작합니다.
 
+`npm run dev`는 기본적으로 `http://127.0.0.1:8000`의 BE로 `/api` 요청을 프록시합니다. Docker에서 BE를 실행 중이라면 프로젝트 루트에서 `docker compose --env-file DB/.env up -d db migrate ai be`로 BE가 켜져 있는지 확인하세요. Docker FE도 5173 포트를 사용하므로 함께 실행할 때는 개발 서버에 `--port 5174`를 지정합니다. BE가 실행되지 않으면 화면에 연결 오류가 표시됩니다.
+
 ## 구현 범위
 
 - 대시보드: 설비 수, 정상 설비, 활성 Setpoint 알람, 대응 우선순위, 설비·심각도별 알람 건수.
-- 설비 현황: Plant → Unit → Equipment 탐색, 2D 예시 배치, 태그 현재값, 선택 센서 강조, 최근 활성 알람.
+- 설비 현황: Plant → Unit → Equipment 탐색, CUD 공정 배치도, 그룹 하위 설비 카드와 각 센서의 최근 저장값. 카드를 선택하면 해당 설비가 선택되며, BE 모드에서는 센서값을 10초 간격으로 다시 조회한다.
 - 공통 설비 선택: 상단 context-bar의 Plant·Unit·Equipment 선택과 왼쪽 계층 메뉴를 동기화. 상위 변경 시 하위 선택·태그를 해제하며 URL·뒤로 가기·새로고침으로 복원.
 - 설비 탐색 패널: 상단 왼쪽 버튼으로 접기·펼치기. 닫으면 업무 화면을 확장하고, 열림 상태는 브라우저에 보관.
-- 트렌드: 센서·시작/종료 시각·조회 간격(자동/1초/1분/1시간/1일) 선택, 간격별 데모 시계열, 기준선과 초과 구간, 추세 설명.
+- 트렌드: Plant와 Equipment Group을 선택하고 설비는 선택하지 않은 경우 CUD의 P1~P6을 센서 종류별 최근 7일 1시간 평균으로 비교한다. P1~P6 버튼으로 각 선을 켜고 끌 수 있으며, 실제값 또는 각 펌프의 7일 평균 대비 차이를 표시한다. 설비 선택 시 센서·시작/종료 시각·조회 간격(자동/1초/1분/1시간/1일) 선택, 기준선과 초과 구간, 추세 설명을 제공한다.
 - 알람: 현재 상태를 매초 조회하고 설비·발생 기간·심각도로 필터링. 재조회 중 기존 데이터를 유지.
 - 보고서: 목록, 생성·수정, 입력 후 800ms 자동 저장, 페이지 이동 시 즉시 저장 시도, 수동 저장, 버전 충돌 비교.
 - 보고서 복원: Zustand 편집본을 입력 즉시 localStorage에 기록. 저장 완료된 보고서는 Mock 서버 파일에도 기록.
@@ -78,14 +67,14 @@ npm run dev
 
 ## API 연결 경계
 
-`.env.example`을 참고해 `.env.local`에 다음을 설정하면 Mock API 대신 실제 서버를 사용합니다.
+개발 기본값은 `.env.development`의 BE 연결 설정입니다. 다른 API 주소로 연결하려면 `.env.development.local`에서 다음 값을 재정의합니다.
 
 ```dotenv
 VITE_API_MODE=remote
-VITE_API_BASE_URL=https://your-api.example.com/api
+VITE_API_BASE_URL=/api
 ```
 
-원격 서버는 브라우저 origin에 대한 CORS를 허용해야 합니다. 원격 API 계약은 [BE API 명세](../plan/be-api.md)를 따르며, `src/shared/api/be-adapter.ts`에서 BE의 `snake_case` 응답을 현재 화면 모델로 변환합니다. 플랜트·그룹·설비·센서 ID는 문자열 코드이고, 나머지 DB `bigint` ID는 JSON 문자열로 받습니다. Mock 모드의 합성 데이터 계약은 유지합니다.
+Vite의 `/api` 프록시는 로컬 BE의 8000 포트로 연결됩니다. 별도 원격 주소를 `VITE_API_BASE_URL`에 직접 지정할 경우 브라우저 origin에 대한 CORS 허용이 필요합니다. 원격 API 계약은 [BE API 명세](../plan/be-api.md)를 따르며, `src/shared/api/be-adapter.ts`에서 BE의 `snake_case` 응답을 현재 화면 모델로 변환합니다. 플랜트·그룹·설비·센서 ID는 문자열 코드이고, 나머지 DB `bigint` ID는 JSON 문자열로 받습니다. Mock 모드는 `VITE_API_MODE=mock npm run dev`로 사용할 수 있습니다.
 
 현재 원격 모드의 알람 화면은 `/api/alarms/history`를 1분 간격으로 조회하고, 설비 상세는 `/api/equipment/{equipment_id}`를 10초 간격으로 조회합니다. 상단 갱신 시각은 설비 상세에서는 해당 설비의 마지막 성공 조회 시각을 표시합니다. 활성 알람과 SSE는 아직 사용하지 않습니다. 보고서 생성·수정은 준비 중입니다. 채팅은 `/api/chat/sessions`와 `/api/chat/stream`을 통해 AI 설비 ID 조회에 연결됩니다. 서버의 센서 임계값이 없으면 기준선과 초과 판정을 표시하지 않습니다.
 

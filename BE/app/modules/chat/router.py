@@ -1,4 +1,4 @@
-"""Token-owned chat sessions and the equipment lookup chat bridge."""
+"""Token-owned chat sessions and workflow responses over SSE."""
 
 import hashlib
 import hmac
@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import get_session
 from app.modules.chat import models as chat_models
-from app.modules.equipment import models as equipment_models
+from app.modules.chat.execution import run_chat_workflow
 from app.modules.request_logs import models as log_models
 
 router = APIRouter(prefix="/api/chat", tags=["채팅"])
@@ -48,8 +48,10 @@ async def _owned_session(request: Request, db: AsyncSession, session_id: str) ->
             )
         )
     ).first()
-    if row is None or row.token_hash is None or not hmac.compare_digest(
-        row.token_hash, hashlib.sha256(token.encode()).hexdigest()
+    if (
+        row is None
+        or row.token_hash is None
+        or not hmac.compare_digest(row.token_hash, hashlib.sha256(token.encode()).hexdigest())
     ):
         raise HTTPException(403, "채팅 세션에 접근할 수 없습니다.")
 
@@ -58,11 +60,11 @@ def _sse(event: str, payload: dict[str, object]) -> str:
     return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-async def _lookup_equipment(message: str) -> dict[str, object]:
+async def _lookup_equipment(message: str, candidates: list[dict]) -> dict[str, object]:
     async with httpx.AsyncClient(timeout=25.0) as client:
         response = await client.post(
             f"{get_settings().ai_base_url.rstrip('/')}/agents/find-equipment-id/invoke",
-            json={"equipment_name": message},
+            json={"equipment_name": message, "candidates": candidates},
         )
         response.raise_for_status()
         return response.json()
@@ -94,20 +96,22 @@ async def create_session(
 
 
 @router.get("/sessions/{session_id}/messages")
-async def list_messages(
-    session_id: str, request: Request, db: AsyncSession = Depends(get_session)
-):
+async def list_messages(session_id: str, request: Request, db: AsyncSession = Depends(get_session)):
     if not session_id.isascii() or not session_id.isdecimal():
         raise HTTPException(404, "채팅 세션을 찾을 수 없습니다.")
     await _owned_session(request, db, session_id)
     rows = (
-        await db.execute(
-            select(chat_models.session_detail)
-            .where(chat_models.session_detail.c.session_id == int(session_id))
-            .order_by(chat_models.session_detail.c.session_detail_id)
-            .limit(200)
+        (
+            await db.execute(
+                select(chat_models.session_detail)
+                .where(chat_models.session_detail.c.session_id == int(session_id))
+                .order_by(chat_models.session_detail.c.session_detail_id)
+                .limit(200)
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return {
         "items": [
             {
@@ -139,7 +143,11 @@ async def chat_stream(
     chat_log_id = (
         await db.execute(
             insert(log_models.chat_request_log)
-            .values(api_request_log_id=api_log_id, status="processing", session_id=int(payload.session_id))
+            .values(
+                api_request_log_id=api_log_id,
+                status="processing",
+                session_id=int(payload.session_id),
+            )
             .returning(log_models.chat_request_log.c.chat_request_log_id)
         )
     ).scalar_one()
@@ -154,53 +162,28 @@ async def chat_stream(
     await db.commit()
 
     try:
-        result = await _lookup_equipment(payload.message)
-        status = result.get("status")
-        ids = (
-            [result.get("equipment_id")]
-            if status == "found"
-            else [item.get("equipment_id") for item in result.get("candidates", [])]
-        )
-        ids = [code for code in ids if isinstance(code, str)]
-        rows = (
+        last_context = (
             await db.execute(
-                select(equipment_models.equipment.c.equipment_id, equipment_models.equipment.c.equipment_name)
-                .where(equipment_models.equipment.c.equipment_id.in_(ids))
+                select(chat_models.session_detail.c.agent_context)
+                .where(
+                    chat_models.session_detail.c.session_id == int(payload.session_id),
+                    chat_models.session_detail.c.type == "llm",
+                )
+                .order_by(chat_models.session_detail.c.session_detail_id.desc())
+                .limit(1)
             )
-        ).all()
-        equipment = {row.equipment_id: row.equipment_name for row in rows}
-        links = []
-        if status == "found" and len(ids) == 1 and ids[0] in equipment:
-            code = ids[0]
-            message = f"{equipment[code]}의 설비 ID는 {code}입니다."
-            links = [{"title": f"{code} 설비 보기", "href": f"/equip?equip_id={code}"}]
-        elif status in {"ambiguous", "not_found"}:
-            codes = list(dict.fromkeys(code for code in ids if code in equipment))[:3]
-            if codes:
-                introduction = (
-                    "어느 설비인지 확인해 주세요. 가능한 후보 순서입니다:"
-                    if status == "ambiguous"
-                    else "정확히 일치하는 설비를 찾지 못했습니다. 비슷한 후보를 확인해 주세요:"
-                )
-                message = introduction + "\n\n" + "\n".join(
-                    f"{rank}. {code} ({equipment[code]})"
-                    for rank, code in enumerate(codes, start=1)
-                )
-                links = [
-                    {"title": f"{rank}순위 {code} 설비 보기", "href": f"/equip?equip_id={code}"}
-                    for rank, code in enumerate(codes, start=1)
-                ]
-            else:
-                message = "설비 후보를 확인하지 못했습니다. 장비 이름을 조금 더 자세히 입력해 주세요."
-        else:
-            message = "설비 조회 결과를 확인하지 못했습니다. 장비 이름을 다시 입력해 주세요."
+        ).scalar_one_or_none()
+        reply = await run_chat_workflow(
+            db, payload.message, payload.screen_context, last_context or {}, _lookup_equipment
+        )
         detail_id = (
             await db.execute(
                 insert(chat_models.session_detail)
                 .values(
                     session_id=int(payload.session_id),
                     type="llm",
-                    content=message,
+                    content=reply.message,
+                    agent_context=reply.context,
                     created_at=datetime.now(UTC),
                 )
                 .returning(chat_models.session_detail.c.session_detail_id)
@@ -248,12 +231,16 @@ async def chat_stream(
             )
         )
         await db.commit()
-        raise HTTPException(502, "AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.") from exc
+        raise HTTPException(
+            502, "AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요."
+        ) from exc
 
     async def events():
-        yield _sse("message.delta", {"text": message})
-        for link in links:
+        yield _sse("message.delta", {"text": reply.message})
+        for link in reply.links:
             yield _sse("citation", link)
+        if reply.navigation_href:
+            yield _sse("navigate", {"href": reply.navigation_href})
         yield _sse("done", {"session_detail_id": str(detail_id)})
 
     return StreamingResponse(events(), media_type="text/event-stream")

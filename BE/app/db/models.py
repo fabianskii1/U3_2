@@ -1,7 +1,7 @@
 """Import all domain tables into shared Alembic metadata."""
 
 from app.db.base import metadata
-from app.modules.alarms.models import alarm
+from app.modules.alarms.models import alarm, alarm_intake
 from app.modules.chat.models import session, session_detail
 from app.modules.equipment.models import equipment, equipment_alias, sensor, sensor_alias
 from app.modules.hierarchy.models import equipment_group, equipment_group_alias, plant, plant_alias
@@ -30,6 +30,7 @@ from app.modules.users.models import user
 
 __all__ = [
     "alarm",
+    "alarm_intake",
     "api_request_error_log",
     "api_request_log",
     "chat_request_error_log",

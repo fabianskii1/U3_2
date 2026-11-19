@@ -20,6 +20,7 @@ const sensor = z.object({
   measurement_name: z.string(),
   unit: z.string(),
   current_value: z.number().nullable().optional(),
+  measured_at: z.string().nullable().optional(),
   threshold_value: z.number().nullable().optional(),
 });
 const equipment = z.object({
@@ -42,6 +43,7 @@ const hierarchy = z.object({
       equipment_group_id: id,
       plant_id: id,
       equipment_group_name: z.string(),
+      process_type: z.string().nullable(),
     }),
   ),
   equipment: z.array(equipment),
@@ -110,6 +112,7 @@ export function mapEquipment(data: unknown): Hierarchy["equipment"][number] {
       name: s.measurement_name,
       unit: s.unit,
       currentValue: s.current_value ?? null,
+      measuredAt: s.measured_at ?? null,
       limit: s.threshold_value ?? undefined,
     })),
   };
@@ -126,6 +129,7 @@ export function mapHierarchy(data: unknown): Hierarchy {
       id: u.equipment_group_id,
       name: u.equipment_group_name,
       plantId: u.plant_id,
+      processType: u.process_type,
     })),
     equipment: raw.equipment.map(mapEquipment),
   };

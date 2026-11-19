@@ -137,7 +137,9 @@ export function AppLayout({
           <div className="page-scroll">{children}</div>
           <footer className="app-footer">
             <span>SKADI / 회전기계설비 모니터링</span>
-            <span>표시 시간대 KST · DEMO WORKSPACE</span>
+            <span>
+              표시 시간대 KST · {remoteApi ? "BE WORKSPACE" : "DEMO WORKSPACE"}
+            </span>
           </footer>
         </main>
         <aside

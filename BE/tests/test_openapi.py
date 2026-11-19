@@ -7,7 +7,10 @@ def test_openapi_groups_every_endpoint_by_domain():
         "/api/hierarchy": "계층",
         "/api/equipment/{equipment_id}": "설비",
         "/api/trend": "시계열",
+        "/api/alarms/priorities": "알람",
         "/api/alarms/history": "알람",
+        "/api/alarms/intake": "알람",
+        "/api/alarms/{alarm_id}/initial-report": "알람",
         "/api/error-types": "고장·정비 이력",
         "/api/error-histories": "고장·정비 이력",
         "/api/maintenance-histories": "고장·정비 이력",
@@ -21,6 +24,10 @@ def test_openapi_groups_every_endpoint_by_domain():
     }
     assert set(schema["paths"]) == set(expected)
     for path, tag in expected.items():
-        method = "post" if path in {"/api/chat/sessions", "/api/chat/stream"} else "get"
+        method = (
+            "post"
+            if path in {"/api/alarms/intake", "/api/chat/sessions", "/api/chat/stream"}
+            else "get"
+        )
         assert schema["paths"][path][method]["tags"] == [tag]
     assert [tag["name"] for tag in schema["tags"]] == list(dict.fromkeys(expected.values()))

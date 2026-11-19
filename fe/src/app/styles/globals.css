@@ -746,6 +746,73 @@ h3 {
   height: 280px;
   min-width: 0;
 }
+.pump-comparison-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 20px 10px;
+}
+.pump-comparison-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.pump-comparison-tabs button {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 11px;
+}
+.pump-comparison-tabs button[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: #e7f4f1;
+  color: var(--primary);
+  font-weight: 700;
+}
+.pump-comparison-equipment {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  padding: 3px 20px 8px;
+}
+.pump-comparison-equipment button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+}
+.pump-comparison-equipment button[aria-pressed="false"] {
+  color: var(--muted);
+  opacity: 0.52;
+}
+.pump-comparison-swatch {
+  width: 15px;
+  height: 3px;
+  border-radius: 2px;
+}
+.pump-comparison-chart {
+  height: 360px;
+  padding: 0 15px 8px;
+}
+.pump-comparison-message,
+.pump-comparison-note {
+  padding: 10px 20px 20px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.pump-comparison-note {
+  padding-top: 0;
+}
 .dashboard-middle .trend-chart {
   height: 220px;
 }
@@ -1188,6 +1255,179 @@ tbody tr:hover {
 .filter-bar .select {
   font-size: 10px;
   max-width: 230px;
+}
+.process-layout {
+  margin-bottom: 17px;
+}
+.process-layout-scroll {
+  overflow-x: auto;
+  padding: 8px 18px 18px;
+}
+.process-layout svg {
+  display: block;
+  width: 100%;
+  min-width: 680px;
+  height: auto;
+  color: var(--ink);
+  font-size: 13px;
+}
+.process-layout text {
+  fill: currentColor;
+  pointer-events: none;
+}
+.process-layout .process-box {
+  fill: #f4f8f8;
+  stroke: #cbdadd;
+}
+.process-layout .process-pipe {
+  fill: none;
+  stroke: #8ca7ab;
+  stroke-width: 2;
+}
+.process-layout .process-arrow {
+  fill: #8ca7ab;
+}
+.process-layout .process-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.process-layout .process-tag {
+  font-size: 12px;
+  font-weight: 700;
+}
+.process-pump circle {
+  fill: white;
+  stroke: #a7b9bd;
+  stroke-width: 3;
+}
+.process-pump[data-level="0"] circle {
+  stroke: #2f9e6b;
+}
+.process-pump[data-level="1"] circle {
+  stroke: #d7aa28;
+}
+.process-pump[data-level="2"] circle {
+  stroke: #e8730c;
+}
+.process-pump[data-level="3"] circle,
+.process-pump[data-level="4"] circle {
+  stroke: #cf4b4b;
+}
+.process-pump.is-interactive {
+  cursor: pointer;
+}
+.process-pump.is-interactive:hover circle,
+.process-pump.is-interactive:focus-visible circle {
+  stroke-width: 5;
+}
+.process-pump.is-selected circle {
+  stroke-width: 6;
+}
+.process-pump:focus-visible {
+  outline: none;
+}
+.process-pump:focus-visible circle {
+  filter: drop-shadow(0 0 3px #19988b);
+}
+.equipment-cards-panel {
+  margin-top: 17px;
+}
+.equipment-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  padding: 0 20px 20px;
+}
+.equipment-summary-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-top: 5px solid #2f9e6b;
+  border-radius: 10px;
+}
+.equipment-summary-card[data-status="1"] {
+  border-top-color: #d7aa28;
+}
+.equipment-summary-card[data-status="2"] {
+  border-top-color: #e8730c;
+}
+.equipment-summary-card[data-status="3"],
+.equipment-summary-card[data-status="4"] {
+  border-top-color: #cf4b4b;
+}
+.equipment-summary-card:hover {
+  border-color: #399880;
+}
+.equipment-summary-card.is-selected {
+  outline: 2px solid var(--primary);
+}
+.equipment-summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.equipment-summary-head > span:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.equipment-summary-id {
+  font-size: 19px;
+  line-height: 1.1;
+}
+.equipment-summary-name {
+  font-size: 12px;
+  color: var(--muted);
+}
+.equipment-summary-message {
+  font-size: 11px;
+  color: var(--muted);
+}
+.equipment-sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+.equipment-sensor-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px;
+  border-left: 3px solid #7ca8a1;
+  border-radius: 5px;
+  background: #f4f8f8;
+}
+.equipment-sensor-name {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.equipment-sensor-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.equipment-sensor-value small {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.equipment-cards-empty {
+  padding: 0 20px 20px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .facility-map {
   position: relative;

@@ -6,6 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY --from=agent_workflow / /opt/skadi-agent-workflow
+RUN pip install --no-cache-dir --no-deps /opt/skadi-agent-workflow
+
 COPY app ./app
 COPY migrations ./migrations
 COPY alembic.ini ./

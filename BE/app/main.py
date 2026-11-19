@@ -28,11 +28,11 @@ app = FastAPI(
         {"name": "계층", "description": "Plant·Unit·설비 계층 조회"},
         {"name": "설비", "description": "설비 상세와 센서 조회"},
         {"name": "시계열", "description": "센서 트렌드 조회"},
-        {"name": "알람", "description": "저장된 알람 이력 조회"},
+        {"name": "알람", "description": "알람 이력과 CoF 우선순위 조회"},
         {"name": "고장·정비 이력", "description": "고장 유형과 고장·정비 이력 조회"},
         {"name": "보고서", "description": "보고서 목록과 상세 조회"},
         {"name": "매뉴얼", "description": "설비 매뉴얼 목록 조회"},
-        {"name": "채팅", "description": "설비 ID 조회 채팅"},
+        {"name": "채팅", "description": "설비·알람·점검 근거 조회 및 정비 초안 채팅"},
         {"name": "운영 상태", "description": "DB 연결 상태 확인"},
     ],
 )
@@ -40,7 +40,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 for domain_router in (

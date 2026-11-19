@@ -8,6 +8,7 @@ export const tagSchema = z.object({
   base: z.number().optional(),
   sensorLevel: z.number().nullable().optional(),
   currentValue: z.number().nullable().optional(),
+  measuredAt: z.string().nullable().optional(),
 });
 export const equipmentSchema = z.object({
   id: z.string(),
@@ -25,7 +26,12 @@ export const hierarchySchema = z.object({
     z.object({ id: z.string(), name: z.string(), location: z.string() }),
   ),
   units: z.array(
-    z.object({ id: z.string(), name: z.string(), plantId: z.string() }),
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      plantId: z.string(),
+      processType: z.string().nullable(),
+    }),
   ),
   equipment: z.array(equipmentSchema),
 });

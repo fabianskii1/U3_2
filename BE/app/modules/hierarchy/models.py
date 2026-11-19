@@ -1,4 +1,4 @@
-from sqlalchemy import Table
+from sqlalchemy import Column, String, Table
 
 from app.db.base import code_fk, code_pk, metadata, pk, text
 
@@ -20,6 +20,7 @@ equipment_group = Table(
     code_pk("equipment_group_id"),
     code_fk("plant_id", "plant.plant_id"),
     text("equipment_group_name"),
+    Column("process_type", String, nullable=True),
 )
 
 

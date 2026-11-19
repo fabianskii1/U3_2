@@ -1,10 +1,10 @@
 """Read-contract integration checks; rows are rolled back after each run."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import insert
+from sqlalchemy import insert, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import engine, get_session
@@ -38,6 +38,7 @@ async def test_read_contract_with_uncommitted_sample_rows():
                     equipment_group_id=unit_id,
                     plant_id=plant_id,
                     equipment_group_name="테스트 Unit",
+                    process_type="CUD",
                 )
             )
             equipment_id = "TEST-PUMP"
@@ -59,6 +60,31 @@ async def test_read_contract_with_uncommitted_sample_rows():
                     equipment_id=equipment_id,
                     measurement_name="베어링 진동",
                     unit="mm/s",
+                )
+            )
+            await connection.execute(
+                insert(m.sensor_signal).values(
+                    signal_id="TEST-SIGNAL",
+                    sensor_id=sensor_id,
+                    measurement_name="베어링 진동",
+                    unit="mm/s",
+                    source_column="test_vibration",
+                )
+            )
+            telemetry_at = datetime.now(UTC) - timedelta(minutes=2)
+            for minute, value in enumerate((5.1, 5.2)):
+                await connection.execute(
+                    insert(m.sensor_data_1m).values(
+                        signal_id="TEST-SIGNAL",
+                        measured_at=telemetry_at + timedelta(minutes=minute),
+                        value=value,
+                    )
+                )
+            await connection.execute(
+                insert(m.sensor_data_1m).values(
+                    signal_id="TEST-SIGNAL",
+                    measured_at=telemetry_at + timedelta(days=1),
+                    value=99.9,
                 )
             )
             occurred_at = datetime(2026, 11, 16, tzinfo=UTC)
@@ -118,8 +144,14 @@ async def test_read_contract_with_uncommitted_sample_rows():
                 assert item["sensors"][0]["current_value"] is None
                 plant = next(p for p in hierarchy["plants"] if p["plant_id"] == str(plant_id))
                 assert plant["aliases"][0]["plant_alias_name"] == "별칭 공장"
+                unit = next(u for u in hierarchy["units"] if u["equipment_group_id"] == unit_id)
+                assert unit["process_type"] == "CUD"
 
                 detail = (await client.get(f"/api/equipment/{equipment_id}")).json()
+                assert detail["sensors"][0]["current_value"] == 5.2
+                assert detail["sensors"][0]["measured_at"] == (
+                    telemetry_at + timedelta(minutes=1)
+                ).isoformat()
                 assert detail["sensors"][0]["threshold_value"] is None
                 trend = (
                     await client.get(
@@ -157,6 +189,30 @@ async def test_read_contract_with_uncommitted_sample_rows():
                 ).json()
                 assert len(second["items"]) == 1
                 assert second["items"][0]["alarm_id"] != first["items"][0]["alarm_id"]
+
+                priority_params = {"equipment_id": equipment_id, "limit": 1}
+                unavailable = (
+                    await client.get("/api/alarms/priorities", params=priority_params)
+                ).json()
+                assert unavailable["status"] == "unavailable"
+                assert unavailable["unknown_count"] == 2
+
+                for result, level, score in ((first, 1, 80), (second, 4, 40)):
+                    await connection.execute(
+                        update(m.alarm)
+                        .where(m.alarm.c.alarm_id == int(result["items"][0]["alarm_id"]))
+                        .values(is_active=True, alarm_level=level, cof_score=score)
+                    )
+                priorities = (
+                    await client.get("/api/alarms/priorities", params=priority_params)
+                ).json()
+                assert priorities["status"] == "ok"
+                assert priorities["active_count"] == 2
+                assert priorities["unknown_count"] == priorities["unscored_count"] == 0
+                assert len(priorities["items"]) == 1
+                assert priorities["items"][0]["alarm_id"] == first["items"][0]["alarm_id"]
+                assert priorities["items"][0]["cof_score"] == 80
+                assert priorities["items"][0]["rank"] == 1
 
                 reports = (
                     await client.get(

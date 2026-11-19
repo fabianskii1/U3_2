@@ -1,4 +1,4 @@
-from sqlalchemy import Table
+from sqlalchemy import JSON, Column, Table
 
 from app.db.base import code_fk, fk, metadata, pk, text, time
 
@@ -18,6 +18,7 @@ session_detail = Table(
     fk("session_id", "session.session_id"),
     text("type"),
     text("content"),
+    Column("agent_context", JSON, nullable=True),
     time("created_at"),
     code_fk("plant_id", "plant.plant_id", True),
     text("plant_alias", True),

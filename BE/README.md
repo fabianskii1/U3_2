@@ -13,7 +13,9 @@ Swagger `/docs`는 계층, 설비, 시계열, 알람, 고장·정비 이력, 보
 - `app/modules/{hierarchy,equipment,telemetry,alarms,histories,reports,manuals}/router.py`: 현재 제공하는 도메인별 조회 API
 - `app/modules/{hierarchy,equipment,alarms,histories,reports,manuals,users,chat,request_logs}/models.py`: 각 도메인이 소유한 SQLAlchemy 테이블
 
-현재는 읽기 전용 API이므로 도메인 라우터에서 조회 쿼리를 처리한다. 쓰기와 복잡한 업무 규칙을 추가할 때 해당 도메인의 service/repository로 분리한다. 도메인 테이블은 한 곳에서만 정의하고 Alembic은 집계 metadata를 읽는다.
+도메인 테이블은 한 곳에서만 정의하고 Alembic은 집계 metadata를 읽는다.
+
+설비 상세의 센서 `current_value`와 `measured_at`은 응답 시각 이전에 저장된 최신 1분 데이터를 조회한다. 저장값이 없으면 `null`을 반환한다.
 
 ## Docker 실행
 
@@ -43,11 +45,22 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - `GET /api/hierarchy`, `GET /api/equipment/{id}`
 - `GET /api/trend`: `sensor_id` 또는 `signal_id`, 기간, 간격으로 적재된 1분 값 또는 1시간·1일 평균 조회
 - `GET /api/alarms/history`, `GET /api/error-types`, `GET /api/error-histories`, `GET /api/maintenance-histories`
+- `GET /api/alarms/priorities`: 활성 Setpoint 알람을 CoF 내림차순으로 조회하며 동점은 심각도, 발생 시각, 알람 ID 순으로 해결한다. 대시보드와 채팅이 같은 순위 서비스에 연결된다.
+- `GET /api/alarms/{alarm_id}/initial-report`: 알람 수신 시 생성한 초기 보고서 스냅샷 조회
 - `GET /api/reports`, `GET /api/reports/{id}`, `GET /api/equipment/{id}/manuals`
 
 목록은 데이터가 없으면 빈 배열 또는 `{items: [], next_cursor: null}`을 반환한다. 개별 ID가 없으면 `404`다. 목록 기본 `limit`은 50, 상한은 200이다. 플랜트·그룹·설비·센서 ID는 `VARCHAR(30)` 코드이고 다른 `bigint` ID는 JSON 문자열로 응답한다. 상세 계약은 [API 명세](../plan/be-api.md)를 따른다.
 
-초기 마이그레이션은 ERD에서 필드가 정의된 26개 테이블을 만든다. 후속 마이그레이션은 코드형 ID와 센서 사양, `sensor_signal` 48건, `sensor_data_1m` 및 `equipment_run_state_1m` TimescaleDB 하이퍼테이블을 만든다. `d4e6c2a9b105`는 전류 IT와 전압 ET를 각각 독립 센서로 연결하고 UT 센서를 제거한다. 최종 센서와 신호는 각각 48건이다. `sensor_data_1s/1h/1d`와 `sensor_alarm_config`는 아직 만들지 않는다. 로그인, 보고서 쓰기, 알람 판정·SSE와 채팅의 다른 업무 기능은 이후 단계다. Docker FE는 구현된 조회 API와 설비 ID 채팅에 연결되며 미구현 기능은 준비 중으로 표시한다.
+초기 마이그레이션은 ERD에서 필드가 정의된 26개 테이블을 만든다. 후속 마이그레이션은 코드형 ID와 센서 사양, `sensor_signal` 48건, `sensor_data_1m` 및 `equipment_run_state_1m` TimescaleDB 하이퍼테이블을 만든다. `d4e6c2a9b105`는 전류 IT와 전압 ET를 각각 독립 센서로 연결하고 UT 센서를 제거한다. 최종 센서와 신호는 각각 48건이다. 설비 상세는 적재된 최신 관측값과 실제 측정 시각을 반환한다.
+
+## 채팅 및 알람 수신
+
+- 채팅 에이전트는 [AI/workflow](../AI/workflow/)에 있다. BE는 사용자 세션과 DB 조회 도구를 에이전트에 연결한다. Compose와 BE 이미지 빌드는 `agent_workflow` 빌드 컨텍스트로 이 패키지를 포함한다.
+- `lookup_alias` 읽기 도구는 `plant`, `equipment_group`, `equipment`, `sensor`와 각 별칭 테이블의 현재 등록값으로 ID·이름·별칭을 찾는다. 동명이면 후보를 반환하고, 플랜트·공정·설비 범위를 적용할 수 있다. DB에서 정확히 일치하지 않는 설비 표현만 AI 식별 API에 전달하며, 이때도 후보 목록은 BE가 현재 DB에서 구성한다.
+- `POST /api/chat/stream`은 Reflector에서 질문과 대상 표현을 추출하고, Action Planner에서 사용할 업무 도구를 선택한다. Executor가 조회한 결과를 `message.delta`, 딥링크 `citation`, `done`으로 보낸다. 설비 현황이나 추이의 대상이 확정되면 `navigate`도 보내 해당 화면을 연다. 추이는 기본 최근 7일을 1시간 단위로 조회한다. “1호기”는 CDU 내부 펌프 목록으로 연결된다. “3번 펌프 전류”처럼 화면이 생략된 요청에는 설비 현황과 트렌드 링크를 제안한다. 설비 후보를 되물은 뒤 번호를 선택하면 이전 센서 조건을 사용한다.
+- `POST /api/alarms/intake`는 모니터링 서비스가 보내는 Setpoint 관측을 받는다. Compose에서는 `DB/.env`, 로컬에서는 `BE/.env`에 `ALARM_INGEST_TOKEN`을 설정하고 요청에 `Authorization: Bearer <token>`을 포함한다. 입력에 고유한 `source_event_id`, 설비·센서 ID, 발생 시각, 상태, 관측값, 기준값과 단위를 담는다. CoF 점수는 수신 데이터에서 공급하며 생략 시 미평가로 표시한다.
+- 새 이벤트를 수신하면 같은 플랜트의 CoF 평가 완료 활성 알람 1순위를 기준으로 초기 보고서 스냅샷을 저장한다. 동일 이벤트 재전송은 기존 응답을 돌려준다. 해제 이벤트에는 `is_active: false`와 원본 알람 이벤트의 `closes_source_event_id`를 함께 보낸다.
+- 점검 근거는 등록 매뉴얼과 같은 설비의 저장 보고서·정비 이력을 조회한다. 정비 조치 보고서는 채팅에 검토용 초안으로 표시한다. 담당자 확정·저장, Wiki 사례 승인·게시, 외부 모니터 연결은 후속 연동이다.
 
 ## CDU 2026년 CSV 적재
 
@@ -67,22 +80,8 @@ uv run python -m scripts.import_cdu_1m --data ../data/CDU_2026_1min_MultiPump/da
 
 ```bash
 cd BE
-export DATABASE_URL='postgresql+asyncpg://test_user:test_password@127.0.0.1:15432/test_db'
-uv run --frozen alembic upgrade head
-uv run --frozen ruff check app migrations tests
-uv run --frozen pytest -q
+uv run ruff check app migrations tests
+uv run pytest -q
 ```
 
-통합 테스트에는 TimescaleDB와 pgvector가 활성화되고 `alembic upgrade head`가 적용된 별도 테스트 PostgreSQL을 사용한다. `DATABASE_URL`을 명시해서 `.env`의 개발·운영 DB에 연결하지 않도록 한다. 테스트 행은 트랜잭션에서만 생성하고 종료 시 롤백한다.
-
-## CI
-
-`.github/workflows/build.yaml`은 `main`의 `BE/**` 또는 워크플로 변경과 `main`에서의 수동 실행에 동작한다. Python 3.12와 고정된 uv 의존성으로 Ruff 및 전체 pytest를 실행한다. 테스트 DB는 작업마다 새로 생성하는 `timescale/timescaledb:2.32.0-pg17` 서비스이며, pgvector 활성화 후 Alembic으로 스키마와 기준 데이터를 준비한다. 저장된 `.env`, DB 덤프, 실제 AI 서비스는 사용하지 않는다.
-
-검증이 통과하면 운영 Dockerfile로 `linux/amd64` 이미지를 빌드하고 `deploy/ci-smoke.sh`로 실제 기본 실행 명령의 `/health`, 계층 및 P1 설비 조회를 확인한다. 모든 검증이 성공한 뒤에만 `HARBOR_USERNAME`·`HARBOR_PASSWORD`로 로그인하여 `harbor.skala-us.com/u3-2/backend:<commit SHA>`를 게시한다. 배포 매니페스트나 실행 중인 서비스는 변경하지 않는다.
-
-이미지 검사 스크립트는 같은 Docker 네트워크의 `db:5432`에 `ci_backend` DB·사용자 및 `ci_backend_only` 비밀번호로 준비된 일회용 DB만 대상으로 한다.
-
-```bash
-bash BE/deploy/ci-smoke.sh <backend-image> <disposable-db-network>
-```
+통합 테스트는 실행 중인 SKADI PostgreSQL을 사용한다. 테스트 행은 트랜잭션에서만 생성하고 종료 시 롤백한다.

@@ -1,91 +1,41 @@
 # AI
 
-Python 3.12 + FastAPI 기반 일반 채팅 서비스다. OpenAI Responses API로 텍스트 답변을 생성한다.
-설비 ID 조회, 위키 검색, 도구 호출은 수행하지 않으며 로컬 지식 문서 없이 시작할 수 있다.
+Skadi 채팅 워크플로와 설비명 판별 서비스다. 별칭의 기준 데이터는 BE가 조회한 DB의 `plant_alias`, `equipment_group_alias`, `equipment_alias`, `sensor_alias`다. AI는 삭제된 로컬 지식 문서나 LLM wiki를 읽지 않는다.
 
-## 실행
+## 채팅 워크플로
 
-```bash
-cd AI
-uv sync --python 3.12
-cp .env.example .env
-# .env의 OPENAI_API_KEY를 설정한다.
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8001
-```
+BE의 `/api/chat/stream`은 `AI/workflow`의 Reflector, Action Planner, Executor를 실행하며 DB 읽기 도구를 주입한다. “P1의 별칭 알려줘”, “이 센서 별칭” 같은 질문은 BE의 `lookup_alias` 도구를 호출한다. 도구는 ID·정식 이름·등록 별칭을 정확히 조회하고, 같은 표현이 여러 대상에 해당하면 후보 선택을 요청한다. 화면의 플랜트·공정·설비 범위로 후보를 좁힐 수 있다.
 
-기본 모델은 `gpt-4.1`이고 `OPENAI_MODEL`로 변경할 수 있다.
-기존 `api_key` 이름도 지원한다. `AI/.env` 값이 실행 환경 변수보다 우선한다.
-키 설정은 요청 시 확인하므로 키가 없어도 `/health`는 응답한다.
+## 설비명 판별 API
 
-## 채팅 API
+정확히 일치하는 DB 이름이나 별칭이 없을 때 BE는 현재 DB에서 읽은 설비 후보를 내부 AI API에 전달한다. AI는 전달된 후보 밖의 설비 ID를 반환하지 않으며, 유사 표현 판별 결과도 BE가 DB 설비 및 범위와 다시 대조한다. 후보가 없으면 `not_found`를 반환한다.
 
-```bash
-curl -s -X POST http://127.0.0.1:8001/agents/chat/invoke \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"안녕! 간단히 자기소개해 줘"}'
-```
+```http
+POST /agents/find-equipment-id/invoke
+Content-Type: application/json
 
-응답 형식:
-
-```json
 {
-  "agent": "chat",
-  "message": "안녕하세요! 질문에 답하고 생각을 정리하는 일을 도와드릴게요."
-}
-```
-
-이전 대화를 이어가려면 호출자가 `history`에 과거 메시지를 전달한다.
-현재 `message`는 `history`에 중복해서 넣지 않는다.
-
-```json
-{
-  "message": "그걸 한 문장으로 요약해 줘",
-  "history": [
-    {"role": "user", "content": "원심펌프 원리를 설명해 줘"},
-    {"role": "assistant", "content": "회전하는 임펠러가 유체에 에너지를 전달합니다."}
+  "equipment_name": "납사 이송 펌프",
+  "candidates": [
+    {
+      "equipment_id": "P2",
+      "equipment_name": "나프타 제품 이송 펌프",
+      "aliases": ["나프타 펌프"]
+    }
   ]
 }
 ```
 
-메시지는 앞뒤 공백을 제거한 뒤 1~5,000자이며 `history`는 최대 20개다.
-이력의 역할은 `user`와 `assistant`만 허용한다. 대화 기록을 AI 서버에 저장하지 않으며
-OpenAI에도 `store=False`로 요청한다. 응답은 완성된 텍스트 한 번으로 반환한다.
-키 인증, 요청 한도, 모델 설정, 연결 오류는 `detail.code`로 구분하고 키나 원문 오류는 노출하지 않는다.
+응답의 `status`는 `found`, `ambiguous`, `not_found` 중 하나다. 유사 표현에 모델을 사용하면 요청 표현과 DB 후보의 ID·등록명·별칭이 OpenAI API로 전송된다. 모델 응답 저장은 `store=False`로 요청한다. 모델 설정에는 `AI/.env`의 `OPENAI_API_KEY` 또는 `api_key`, 선택적으로 `OPENAI_MODEL`을 사용한다.
 
-## BE 연결 상태
-
-이번 변경은 AI 서비스에만 적용했다. 기존 BE의
-`/agents/find-equipment-id/invoke` 호출과 설비 조회 응답 형식은 변경하지 않았다.
-이전 설비 조회 API는 제거했으므로 현재 웹 채팅은 이 AI API와 호환되지 않는다.
-일반 채팅 연결 시 BE에서 새 경로와 `message`/`history` 요청, `message` 응답을 사용해야 한다.
-
-## 검증
+## 실행과 검증
 
 ```bash
-uv sync --frozen --group dev
-uv run --frozen --no-sync ruff check app tests
-uv run --frozen --no-sync pytest -q
+cd AI
+uv sync --python 3.12
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8001
+uv run ruff check app tests
+uv run pytest -q
 ```
 
-테스트는 외부 HTTP 응답을 대체하여 실제 모델 호출과 과금 없이 API 계약,
-대화 이력 전달, 입력 검증 및 오류 처리를 확인한다.
-
-## 이미지 CI
-
-`.github/workflows/build-ai.yaml`은 `main`의 `AI/**` 변경 또는 수동 실행 시
-위 검증을 수행하고 `linux/amd64` 이미지를 빌드한다. 실제 이미지의 기본 명령으로
-서버를 시작해 `/health`와 키가 없는 채팅 요청의 `503 MODEL_CONFIG_MISSING`을 확인한 뒤
-`harbor.skala-us.com/u3-2/ai:<커밋 SHA>`로 푸시한다. Harbor 인증에는 저장소의
-`HARBOR_USERNAME`, `HARBOR_PASSWORD` 시크릿을 사용한다. 수동 실행도 `main`에서만 동작한다.
-CI와 Dockerfile은 같은 uv `0.12.13`으로 `uv.lock`의 고정된 의존성을 설치한다.
-
-같은 이미지 검증을 로컬에서 실행할 수 있다.
-
-```bash
-docker build --platform linux/amd64 -f AI/deploy/Dockerfile -t skadi-ai-ci:local AI
-bash AI/deploy/ci-smoke.sh skadi-ai-ci:local
-```
-
-위 명령은 저장소 루트에서 실행한다. 검사 컨테이너는 네트워크와 모델 키 없이 실행하고
-종료 시 삭제한다. 호스트 `.env`는 전달하지 않으며 이미지에 `.env`가 포함돼도 검증에 실패한다.
-이미지 게시가 배포를 바꾸지는 않는다. BE의 기존 설비 조회 API 연동 불일치는 그대로 남는다.
+Compose에서는 프로젝트 루트에서 `docker compose --env-file DB/.env up -d --build`를 실행한다. AI API는 내부 서비스이며 FE는 BE의 채팅 API에 연결한다.
