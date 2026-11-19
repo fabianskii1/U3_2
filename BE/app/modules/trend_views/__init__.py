@@ -1,0 +1,1 @@
+"""Persisted trend view definitions."""

@@ -2,7 +2,7 @@
 
 from app.db.base import metadata
 from app.modules.alarms.models import alarm, alarm_intake
-from app.modules.chat.models import session, session_detail
+from app.modules.chat.models import chat_result, session, session_detail
 from app.modules.equipment.models import equipment, equipment_alias, sensor, sensor_alias
 from app.modules.hierarchy.models import equipment_group, equipment_group_alias, plant, plant_alias
 from app.modules.histories.models import (
@@ -26,6 +26,7 @@ from app.modules.request_logs.models import (
     chat_request_log,
 )
 from app.modules.telemetry.models import equipment_run_state_1m, sensor_data_1m, sensor_signal
+from app.modules.trend_views.models import trend_view
 from app.modules.users.models import user
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "api_request_log",
     "chat_request_error_log",
     "chat_request_log",
+    "chat_result",
     "equipment",
     "equipment_alias",
     "equipment_group",
@@ -59,5 +61,6 @@ __all__ = [
     "sensor_signal",
     "session",
     "session_detail",
+    "trend_view",
     "user",
 ]

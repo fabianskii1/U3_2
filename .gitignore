@@ -2,7 +2,7 @@
 .vscode/
 .idea/
 DB/.env
-DB/*.dump
+DB/dump/*.dump
 BE/.env
 BE/.venv/
 AI/.env
