@@ -1,0 +1,56 @@
+name: Validate and publish deployment manifests
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - .github/scripts/**
+      - .github/workflows/promote-deployment.yaml
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/scripts/**
+      - .github/workflows/promote-deployment.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Test tag edits and publication against disposable Git repositories
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
+
+  publish:
+    needs: checks
+    if: inputs.component != '' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tested source with full history and Git push credentials
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Publish the successful image and its component manifests
+        env:
+          COMPONENT: ${{ inputs.component }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          GIT_TERMINAL_PROMPT: '0'
+        run: python3 .github/scripts/publish_deployment.py "$COMPONENT" "$SOURCE_SHA"

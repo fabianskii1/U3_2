@@ -9,20 +9,24 @@ BE·FE·AI·DB는 각각 별도 workflow로 검사한다. main에 대한 PR에�
   → linux/amd64 이미지 빌드·로컬 로드
   → 실제 컨테이너 기동 검사
   → main 실행에서 성공한 이미지만 Harbor에 업로드
+  → BE·FE·AI는 해당 컴포넌트 설정·태그를 gitops/dev에 자동 반영
+  → 해당 브랜치를 읽는 Argo CD의 Auto Sync
 ```
 
 ## 구성
 
 | 대상 | Workflow | 자동 실행 경로 | 업로드 이미지 |
 | --- | --- | --- | --- |
-| BE | `.github/workflows/build.yaml` | `BE/**`, `AI/workflow/**`, 해당 workflow | `harbor.skala-us.com/u3-2/backend:<SHA>` |
-| FE | `.github/workflows/build-fe.yaml` | `fe/**`, 해당 workflow | `harbor.skala-us.com/u3-2/frontend:<SHA>` |
-| AI | `.github/workflows/build-ai.yaml` | `AI/**`, 해당 workflow | `harbor.skala-us.com/u3-2/ai:<SHA>` |
+| BE | `.github/workflows/build.yaml` | `BE/**`, `AI/workflow/**`, `k8s/backend/*.yaml`, 해당 workflow | `harbor.skala-us.com/u3-2/backend:<SHA>` |
+| FE | `.github/workflows/build-fe.yaml` | `fe/**`, `k8s/frontend/*.yaml`, 해당 workflow | `harbor.skala-us.com/u3-2/frontend:<SHA>` |
+| AI | `.github/workflows/build-ai.yaml` | `AI/**`, `k8s/ai/*.yaml`, 해당 workflow | `harbor.skala-us.com/u3-2/ai:<SHA>` |
 | DB | `.github/workflows/build-db.yaml` | `DB/docker/**`, 해당 workflow | `harbor.skala-us.com/u3-2/db:<SHA>` |
 
 자동 검사는 main push와 main을 대상으로 하는 PR에 동작한다. PR에서는 검사·빌드·기동 확인까지만
 수행하고 Harbor 로그인과 push는 건너뛴다. 수동 실행은 GitHub Actions의 Run workflow로 수행한다.
-main 외 브랜치의 수동 검사도 업로드하지 않는다. main에서의 수동 실행은 검증 후 이미지를 업로드한다.
+main 외 브랜치의 수동 검사도 업로드하지 않는다. main에서의 수동 실행은 검증 후 이미지를 업로드하고 앱 배포 태그를 발행한다.
+공유 `.github/workflows/promote-deployment.yaml`은 태그·Git 발행 테스트와 main 전용 publish job을 제공한다.
+DB workflow는 배포 태그를 자동 발행하지 않는다.
 
 ## 검사 범위
 
@@ -49,14 +53,13 @@ Kubernetes의 DB 비밀번호, OpenAI API 키, AWS 키를 CI에 추가하지 않
 
 ## 운영 배포와의 관계
 
-CI가 새 이미지를 올려도 현재 EKS Pod의 버전은 바뀌지 않는다.
-현재 workflow는 매니페스트 수정, Argo CD Sync, Blue-Green 승격을 수행하지 않는다.
+main에는 PR·승인 규칙을 유지한다. BE·FE·AI의 성공한 CI는 읽기 권한의 build job 뒤에
+별도 `contents: write` publish job을 실행해 `gitops/dev`에 태그와 해당 컴포넌트의 배포 YAML을 반영한다.
+Argo CD의 대상 Revision을 `gitops/dev`, Sync Policy를 Automated로 한 번 설정하면 후속 배포가 이어진다.
+DB는 `main`과 Manual을 유지한다. 활성 Service와 비활성 slot의 replicas는 바꾸지 않는다.
 
-1. GitHub Actions 성공과 Harbor의 새 SHA 태그를 확인한다.
-2. 현재 개발 모드에서는 활성 BE Green·AI Blue의 이미지 태그를 변경한다. FE는 `k8s/frontend/kustomization.yaml`의 이미지 태그를 변경한다.
-3. Git에 반영하고 해당 Argo CD Application을 Sync한다.
-4. Rolling 완료와 API·화면을 검증한다. 개발 모드에서는 Service selector를 전환하지 않는다.
-5. DB는 백업과 PostgreSQL·확장 호환성을 먼저 확인하고 별도로 배포한다.
+최초 연결·충돌 재시도·오래된 빌드 방지·실패/복귀 절차는 [자동 배포 안내](gitops.md)를 따른다.
+태그 발행 성공만으로 API·화면이나 실제 모델 응답까지 검증됐다고 판단하지 않는다.
 
 통합 소스의 AI는 설비 조회 API를 제공한다. `k8s/`에 고정된 이전 이미지가 이 새 코드를 포함하는 것은 아니다.
 현재 이미지 목록과 배포 전 마이그레이션·새 태그 반영 순서는 [배포 안내](../k8s/README.md)를 따른다.

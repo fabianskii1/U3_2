@@ -6,12 +6,14 @@ on:
     paths:
       - BE/**
       - AI/workflow/**
+      - k8s/backend/*.yaml
       - .github/workflows/build.yaml
   pull_request:
     branches: [main]
     paths:
       - BE/**
       - AI/workflow/**
+      - k8s/backend/*.yaml
       - .github/workflows/build.yaml
   workflow_dispatch:
 
@@ -110,3 +112,13 @@ jobs:
       - name: Push tested backend image
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: docker push "$BE_IMAGE"
+
+  promote:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/promote-deployment.yaml
+    with:
+      component: backend
+      source_sha: ${{ github.sha }}

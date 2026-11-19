@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - AI/**
+      - k8s/ai/*.yaml
       - .github/workflows/build-ai.yaml
   pull_request:
     branches: [main]
     paths:
       - AI/**
+      - k8s/ai/*.yaml
       - .github/workflows/build-ai.yaml
   workflow_dispatch:
 
@@ -75,3 +77,13 @@ jobs:
       - name: Push tested AI image
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: docker push "$AI_IMAGE"
+
+  promote:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/promote-deployment.yaml
+    with:
+      component: ai
+      source_sha: ${{ github.sha }}
