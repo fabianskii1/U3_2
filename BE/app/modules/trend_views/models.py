@@ -1,4 +1,12 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, Index, Table
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKeyConstraint,
+    Index,
+    Table,
+)
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
@@ -14,12 +22,18 @@ trend_view = Table(
         server_default=sql_text("gen_random_uuid()"),
     ),
     fk("session_id", "session.session_id"),
+    Column("session_detail_id", BigInteger, nullable=True),
     code_fk("plant_id", "plant.plant_id"),
     code_fk("equipment_group_id", "equipment_group.equipment_group_id"),
     code_fk("equipment_id", "equipment.equipment_id", True),
     Column("config", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=sql_text("now()")),
     time("expires_at", True),
+    ForeignKeyConstraint(
+        ["session_id", "session_detail_id"],
+        ["session_detail.session_id", "session_detail.session_detail_id"],
+        name="fk_trend_view_message_same_session",
+    ),
     CheckConstraint("jsonb_typeof(config) = 'object'", name="ck_trend_view_config_object"),
     CheckConstraint(
         "COALESCE(jsonb_typeof(config->'version') = 'number', false) "
