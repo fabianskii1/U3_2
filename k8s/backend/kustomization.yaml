@@ -16,4 +16,4 @@ images:
     newTag: "056c253625e73639604ab088ca475cfa675f61d7"
   - name: backend-green-image
     newName: harbor.skala-us.com/u3-2/backend
-    newTag: "056c253625e73639604ab088ca475cfa675f61d7"
+    newTag: "9c63c1e3c04c19d2ee430d01d7ea946f04926722"
