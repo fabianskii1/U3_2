@@ -10,6 +10,7 @@ import {
   useTrendStore,
 } from "../../features/trend/index.ts";
 import { Card, CardHeader } from "../../shared/ui/card.tsx";
+import { Button } from "../../shared/ui/button.tsx";
 import { PumpComparisonChart } from "../../features/trend/ui/PumpComparisonChart.tsx";
 import { MultiTrendView } from "../../features/trend/ui/MultiTrendView.tsx";
 import { savedTrendQuery } from "../../features/trend/api/trend-view.queries.ts";
@@ -23,6 +24,7 @@ import { errorMessage } from "../../shared/api/http-client.ts";
 import { remoteApi } from "../../shared/api/be-adapter.ts";
 import {
   intervalMode,
+  type IntervalMode,
   resolveInterval,
   intervalLabel,
   trendRange,
@@ -39,23 +41,29 @@ export function TrendPage({
 }) {
   const [params] = useSearchParams();
   const viewId = params.get("viewId");
-  const equipmentId = params.get("equip_id");
   if (viewId !== null)
-    return <SavedTrendPage hierarchy={hierarchy} viewId={viewId} />;
-  if (equipmentId && !params.has("sensor_id"))
     return (
-      <EquipmentTrendPage hierarchy={hierarchy} equipmentId={equipmentId} />
+      <SavedTrendPage
+        hierarchy={hierarchy}
+        selection={selection}
+        viewId={viewId}
+      />
     );
+  if (selection.equipmentId && selection.sensorIds.length !== 1)
+    return <EquipmentTrendPage hierarchy={hierarchy} selection={selection} />;
   return <LegacyTrendPage hierarchy={hierarchy} selection={selection} />;
 }
 
 function SavedTrendPage({
   hierarchy,
+  selection,
   viewId,
 }: {
   hierarchy: Hierarchy;
+  selection: Selection;
   viewId: string;
 }) {
+  const [params, setParams] = useSearchParams();
   const query = useQuery(savedTrendQuery(viewId));
   if (!z.string().uuid().safeParse(viewId).success)
     return <ErrorState message="올바르지 않은 트렌드 링크입니다." />;
@@ -70,41 +78,89 @@ function SavedTrendPage({
   const asset = hierarchy.equipment.find(
     (item) => item.id === query.data.equipmentId,
   );
+  const originalSeries = query.data.config.series;
+  const savedFrom = kstInput(
+    new Date(
+      Math.min(...originalSeries.map((item) => Date.parse(item.start))),
+    ).toISOString(),
+  );
+  const savedTo = kstInput(
+    new Date(
+      Math.max(...originalSeries.map((item) => Date.parse(item.end))),
+    ).toISOString(),
+  );
+  const customRange = params.has("view_from") || params.has("view_to");
+  const bounds = trendRange(
+    params.get("view_from") ?? savedFrom,
+    params.get("view_to") ?? savedTo,
+  );
+  const requestedMode = intervalMode(params.get("interval"));
+  const mode = remoteApi && requestedMode === "1s" ? "auto" : requestedMode;
+  const selectedSeries = originalSeries
+    .filter((item) => selection.sensorIds.includes(item.sensorId))
+    .map((item) =>
+      customRange ? { ...item, start: bounds.from, end: bounds.to } : item,
+    );
   return (
     <div className="page">
       <div className="page-heading">
         <div>
           <div className="eyebrow">SAVED TREND VIEW</div>
           <h1>{asset ? `${asset.name} 트렌드` : "저장된 트렌드"}</h1>
-          <p>저장 당시 확정된 센서별 조회 기간을 표시합니다.</p>
+          <p>
+            {customRange
+              ? "선택한 공통 기간을 센서 차트에 적용합니다."
+              : "저장 당시 확정된 센서별 조회 기간을 표시합니다."}
+          </p>
         </div>
       </div>
-      <MultiTrendView
-        hierarchy={hierarchy}
-        series={query.data.config.series}
-        showAnomalies={query.data.config.showAnomalies}
+      <MultiTrendFilters
+        params={params}
+        setParams={setParams}
+        bounds={bounds}
+        mode={mode}
+        restoreSavedRange={customRange}
+        fromKey="view_from"
+        toKey="view_to"
       />
+      {customRange && !bounds.valid ? (
+        <ErrorState message="시작 일자와 종료 일자를 확인하세요." />
+      ) : selection.sensorIds.length === 0 ? (
+        <EmptyState
+          title="선택된 센서가 없습니다"
+          description="상단 Sensor 메뉴에서 센서를 선택하세요."
+        />
+      ) : (
+        <MultiTrendView
+          hierarchy={hierarchy}
+          series={selectedSeries}
+          showAnomalies={query.data.config.showAnomalies}
+          mode={mode}
+        />
+      )}
     </div>
   );
 }
 
 function EquipmentTrendPage({
   hierarchy,
-  equipmentId,
+  selection,
 }: {
   hierarchy: Hierarchy;
-  equipmentId: string;
+  selection: Selection;
 }) {
-  const asset = hierarchy.equipment.find((item) => item.id === equipmentId);
-  const [params] = useSearchParams();
+  const asset = hierarchy.equipment.find(
+    (item) => item.id === selection.equipmentId,
+  );
+  const [params, setParams] = useSearchParams();
   const range = defaultRange();
   const bounds = trendRange(
     params.get("from") ?? range.from,
     params.get("to") ?? range.to,
   );
   if (!asset) return <ErrorState message="설비를 찾을 수 없습니다." />;
-  if (!bounds.valid)
-    return <ErrorState message="시작 일자와 종료 일자를 확인하세요." />;
+  const requestedMode = intervalMode(params.get("interval"));
+  const mode = remoteApi && requestedMode === "1s" ? "auto" : requestedMode;
   if (!asset.tags.length)
     return (
       <EmptyState
@@ -112,24 +168,114 @@ function EquipmentTrendPage({
         description="등록된 센서가 없습니다."
       />
     );
+  const selected = asset.tags.filter((tag) =>
+    selection.sensorIds.includes(tag.id),
+  );
   return (
     <div className="page">
       <div className="page-heading">
         <div>
           <div className="eyebrow">SIGNAL ANALYTICS</div>
-          <h1>{asset.name} 전체 센서 트렌드</h1>
+          <h1>{asset.name} 선택 센서 트렌드</h1>
         </div>
       </div>
-      <MultiTrendView
-        hierarchy={hierarchy}
-        series={asset.tags.map((tag) => ({
-          sensorId: tag.id,
-          start: bounds.from,
-          end: bounds.to,
-        }))}
-        showAnomalies={false}
+      <MultiTrendFilters
+        params={params}
+        setParams={setParams}
+        bounds={bounds}
+        mode={mode}
       />
+      {!bounds.valid ? (
+        <ErrorState message="시작 일자와 종료 일자를 확인하세요." />
+      ) : selected.length === 0 ? (
+        <EmptyState
+          title="선택된 센서가 없습니다"
+          description="상단 Sensor 메뉴에서 센서를 선택하세요."
+        />
+      ) : (
+        <MultiTrendView
+          hierarchy={hierarchy}
+          series={selected.map((tag) => ({
+            sensorId: tag.id,
+            start: bounds.from,
+            end: bounds.to,
+          }))}
+          showAnomalies={false}
+          mode={mode}
+        />
+      )}
     </div>
+  );
+}
+
+function kstInput(value: string) {
+  return new Date(Date.parse(value) + 9 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 19);
+}
+
+function MultiTrendFilters({
+  params,
+  setParams,
+  bounds,
+  mode,
+  restoreSavedRange = false,
+  fromKey = "from",
+  toKey = "to",
+}: {
+  params: URLSearchParams;
+  setParams: ReturnType<typeof useSearchParams>[1];
+  bounds: ReturnType<typeof trendRange>;
+  mode: IntervalMode;
+  restoreSavedRange?: boolean;
+  fromKey?: string;
+  toKey?: string;
+}) {
+  const update = (changes: Record<string, string | null>) => {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === null) next.delete(key);
+      else next.set(key, value);
+    }
+    setParams(next);
+  };
+  return (
+    <Card>
+      <div className="filter-bar">
+        <div className="inline">
+          <label htmlFor="trend-interval" className="small muted">
+            조회 간격
+          </label>
+          <Select
+            id="trend-interval"
+            value={mode}
+            onChange={(event) => update({ interval: event.target.value })}
+          >
+            <option value="auto">자동</option>
+            {!remoteApi && <option value="1s">1초</option>}
+            <option value="1m">1분</option>
+            <option value="1h">1시간</option>
+            <option value="1d">1일</option>
+          </Select>
+        </div>
+        <DateRangePicker
+          withTime
+          from={bounds.inputFrom}
+          to={bounds.inputTo}
+          onChange={(from, to) => update({ [fromKey]: from, [toKey]: to })}
+        />
+        {restoreSavedRange && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => update({ [fromKey]: null, [toKey]: null })}
+          >
+            저장된 기간 복원
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -146,8 +292,7 @@ function LegacyTrendPage({
     (unit) =>
       unit.id === selection.unitId && unit.plantId === selection.plantId,
   );
-  const sensor =
-    eq?.tags.find((t) => t.id === params.get("sensor_id")) ?? eq?.tags[0];
+  const sensor = eq?.tags.find((t) => t.id === selection.sensorIds[0]);
   const range = defaultRange();
   const from = params.get("from") ?? range.from;
   const to = params.get("to") ?? range.to;

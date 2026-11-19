@@ -1,4 +1,5 @@
 import { NavLink, Link, useLocation } from "react-router";
+import type { Selection } from "../../features/hierarchy/index.ts";
 import * as NavigationMenu from "@radix-ui/react-navigation-menu";
 import {
   Activity,
@@ -17,14 +18,37 @@ const menus = [
   { to: "/reports", label: "보고서", icon: FileText },
   { to: "/alarms", label: "알람", icon: Bell },
 ];
-export function Header() {
+export function Header({ selection }: { selection: Selection }) {
   const location = useLocation();
   const hierarchyParams = new URLSearchParams();
-  for (const key of ["plant_id", "unit_id", "equip_id"]) {
-    const value = new URLSearchParams(location.search).get(key);
-    if (value) hierarchyParams.set(key, value);
+  if (selection.plantId) hierarchyParams.set("plant_id", selection.plantId);
+  if (selection.unitId) hierarchyParams.set("unit_id", selection.unitId);
+  if (selection.equipmentId) {
+    hierarchyParams.set("equip_id", selection.equipmentId);
+    if (selection.sensorIds.length === 0)
+      hierarchyParams.append("sensor_id", "");
+    else
+      selection.sensorIds.forEach((id) =>
+        hierarchyParams.append("sensor_id", id),
+      );
   }
   const suffix = hierarchyParams.size ? "?" + hierarchyParams.toString() : "";
+  const currentParams = new URLSearchParams(location.search);
+  const viewId = currentParams.get("viewId");
+  const savedTrendParams = new URLSearchParams();
+  if (viewId) {
+    savedTrendParams.set("viewId", viewId);
+    for (const key of ["view_from", "view_to", "interval"]) {
+      const value = currentParams.get(key);
+      if (value) savedTrendParams.set(key, value);
+    }
+    if (selection.sensorIds.length === 0)
+      savedTrendParams.append("selected_sensor_id", "");
+    else
+      selection.sensorIds.forEach((id) =>
+        savedTrendParams.append("selected_sensor_id", id),
+      );
+  }
   return (
     <header className="app-header">
       <Link to="/dashboard" className="brand">
@@ -41,7 +65,11 @@ export function Header() {
             <NavigationMenu.Item key={to}>
               <NavigationMenu.Link asChild>
                 <NavLink
-                  to={to + suffix}
+                  to={
+                    to === "/trend" && viewId
+                      ? `/trend?${savedTrendParams}`
+                      : to + suffix
+                  }
                   className={({ isActive }) => (isActive ? "active" : "")}
                 >
                   <Icon size={16} />

@@ -239,6 +239,7 @@ export function CDUProcessLayout({
                           plantId: equipment.plantId,
                           unitId: equipment.unitId,
                           equipmentId: equipment.id,
+                          sensorIds: equipment.tags.map((tag) => tag.id),
                         })
                     : undefined
                 }
@@ -251,6 +252,7 @@ export function CDUProcessLayout({
                             plantId: equipment.plantId,
                             unitId: equipment.unitId,
                             equipmentId: equipment.id,
+                            sensorIds: equipment.tags.map((tag) => tag.id),
                           });
                         }
                       }

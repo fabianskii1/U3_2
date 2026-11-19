@@ -41,4 +41,5 @@ export type Selection = {
   plantId: string | null;
   unitId: string | null;
   equipmentId: string | null;
+  sensorIds: string[];
 };

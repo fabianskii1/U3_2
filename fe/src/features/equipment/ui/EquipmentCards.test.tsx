@@ -45,6 +45,9 @@ describe("EquipmentCards", () => {
       plantId: "P-01",
       unitId: "P-01-P1",
       equipmentId: "P-1101A",
+      sensorIds: hierarchy.equipment
+        .find((item) => item.id === "P-1101A")!
+        .tags.map((tag) => tag.id),
     });
   });
 });

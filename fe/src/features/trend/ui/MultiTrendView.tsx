@@ -8,6 +8,7 @@ import { ErrorState } from "../../../shared/ui/ErrorState.tsx";
 import { LoadingState } from "../../../shared/ui/LoadingState.tsx";
 import { errorMessage } from "../../../shared/api/http-client.ts";
 import { remoteApi } from "../../../shared/api/be-adapter.ts";
+import type { SensorInterval } from "../model/trend-interval.ts";
 import {
   intervalLabel,
   pointCount,
@@ -20,10 +21,12 @@ export function MultiTrendView({
   hierarchy,
   series,
   showAnomalies,
+  mode = "auto",
 }: {
   hierarchy: Hierarchy;
   series: TrendSeries[];
   showAnomalies: boolean;
+  mode?: SensorInterval | "auto";
 }) {
   const limited = series.slice(0, 24);
   const tags = new Map(
@@ -33,7 +36,7 @@ export function MultiTrendView({
   );
   const intervals = limited.map((item) =>
     resolveInterval(
-      "auto",
+      mode,
       item.start,
       item.end,
       remoteApi ? remoteTrendIntervals : undefined,

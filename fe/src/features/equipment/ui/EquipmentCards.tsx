@@ -52,6 +52,7 @@ export function EquipmentCards({
                     plantId: item.plantId,
                     unitId: item.unitId,
                     equipmentId: item.id,
+                    sensorIds: item.tags.map((tag) => tag.id),
                   })
                 }
               >

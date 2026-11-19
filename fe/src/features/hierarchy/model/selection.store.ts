@@ -10,6 +10,7 @@ export const useSelectionStore = create<
       plantId: null,
       unitId: null,
       equipmentId: null,
+      sensorIds: [],
       setSelection: (next) => set(next, false, "selection/set"),
     }),
     devtoolsOptions("Selection"),

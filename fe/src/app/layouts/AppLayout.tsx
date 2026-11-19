@@ -32,11 +32,13 @@ export function AppLayout({
   hierarchy,
   selection,
   onSelect,
+  availableSensorIds,
   children,
 }: {
   hierarchy: Hierarchy;
   selection: Selection;
   onSelect: (s: Selection) => void;
+  availableSensorIds?: string[];
   children: ReactNode;
 }) {
   const location = useLocation();
@@ -67,7 +69,7 @@ export function AppLayout({
     : alarms.dataUpdatedAt;
   return (
     <div className={`app-shell ${dragging ? "resizing" : ""}`}>
-      <Header />
+      <Header selection={selection} />
       <div className="workspace">
         <HierarchyNavigation
           hidden={!hierarchyOpen}
@@ -105,11 +107,10 @@ export function AppLayout({
                 data={hierarchy}
                 selection={selection}
                 onSelect={onSelect}
+                availableSensorIds={availableSensorIds}
               />
             </div>
-            <div
-              className={`sync-status ${syncError ? "sync-error" : ""}`}
-            >
+            <div className={`sync-status ${syncError ? "sync-error" : ""}`}>
               <span className="status-dot" />
               {syncError
                 ? "연결 오류 · 마지막 데이터 표시"

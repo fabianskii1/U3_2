@@ -93,18 +93,52 @@ export function App() {
   const data = hierarchy.data;
   const selection =
     viewId && savedTrend.data
-      ? savedTrendSelection(savedTrend.data)
+      ? savedTrendSelection(savedTrend.data, params)
       : resolveSelection(params, data);
   const onSelect = (next: Selection) => {
-    useSelectionStore.getState().setSelection(next);
-    const p = selectionParams(next, params);
+    const updated =
+      next.equipmentId && next.equipmentId !== selection.equipmentId
+        ? {
+            ...next,
+            sensorIds:
+              data.equipment
+                .find((item) => item.id === next.equipmentId)
+                ?.tags.map((tag) => tag.id) ?? [],
+          }
+        : next;
+    useSelectionStore.getState().setSelection(updated);
+    const p = selectionParams(updated, params);
+    if (
+      viewId &&
+      updated.plantId === selection.plantId &&
+      updated.unitId === selection.unitId &&
+      updated.equipmentId === selection.equipmentId
+    ) {
+      p.delete("sensor_id");
+      p.set("viewId", viewId);
+      if (updated.sensorIds.length === 0) p.append("selected_sensor_id", "");
+      else
+        updated.sensorIds.forEach((id) => p.append("selected_sensor_id", id));
+    } else {
+      p.delete("view_from");
+      p.delete("view_to");
+    }
     navigate(`${pathname === "/" ? "/equip" : pathname}?${p.toString()}`);
   };
   return (
     <>
       <SelectionUrlSync selection={selection} />
       {!remoteApi && <ReportAutosaveBridge />}
-      <AppLayout hierarchy={data} selection={selection} onSelect={onSelect}>
+      <AppLayout
+        hierarchy={data}
+        selection={selection}
+        onSelect={onSelect}
+        availableSensorIds={
+          viewId
+            ? savedTrend.data?.config.series.map((item) => item.sensorId)
+            : undefined
+        }
+      >
         <Suspense fallback={<LoadingState />}>
           {alarms.isError ? (
             <ErrorState

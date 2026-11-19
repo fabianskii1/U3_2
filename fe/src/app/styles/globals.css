@@ -528,7 +528,7 @@ h3 {
   gap: 5px;
   flex: 1;
   min-width: 0;
-  max-width: 570px;
+  max-width: 760px;
 }
 .hierarchy-filters > svg {
   flex-shrink: 0;
@@ -562,6 +562,79 @@ h3 {
 }
 .context-equipment-select {
   flex-grow: 1.35;
+}
+.context-sensors {
+  position: relative;
+  flex: 1.1;
+  min-width: 130px;
+  align-self: stretch;
+}
+.context-sensors > summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  list-style: none;
+  cursor: pointer;
+}
+.context-sensors > summary::-webkit-details-marker {
+  display: none;
+}
+.context-sensors > summary span {
+  color: #81969e;
+  font-size: 9px;
+}
+.context-sensors > summary strong {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px solid #dce5e8;
+  border-radius: 6px;
+  background: white;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.context-sensors-menu {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  right: 0;
+  width: max-content;
+  min-width: 230px;
+  max-height: 300px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid #dce5e8;
+  border-radius: 6px;
+  background: white;
+  box-shadow: 0 8px 22px #122b351c;
+}
+.context-sensors-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.context-sensors-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid #eaf0f2;
+  padding: 4px 6px 8px;
+}
+.context-sensors-actions button {
+  border: 0;
+  background: transparent;
+  color: #24758b;
+  font-size: 11px;
+  cursor: pointer;
+}
+.context-sensors-actions button:disabled {
+  color: #a4b3b9;
+  cursor: default;
 }
 .context-bar .sync-status {
   margin-left: auto;

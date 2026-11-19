@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useSearchParams } from "react-router";
 import { hierarchy } from "../../../mock/fixtures.ts";
 import { useTrendStore } from "../../features/trend/model/trend.store.ts";
 import { defaultRange, dateBounds } from "../../shared/lib/date-time.ts";
@@ -62,14 +62,24 @@ function renderTrend(
   equipmentId: string | null = "P-1101A",
   plantId: string | null = "P-01",
   unitId: string | null = "P-01-P1",
+  sensorIds?: string[],
 ) {
+  function TestTrend() {
+    const [params] = useSearchParams();
+    const selectedSensors =
+      sensorIds ??
+      (equipmentId ? [params.get("sensor_id") ?? "P1101A-VIB"] : []);
+    return (
+      <TrendPage
+        hierarchy={hierarchy}
+        selection={{ plantId, unitId, equipmentId, sensorIds: selectedSensors }}
+      />
+    );
+  }
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter initialEntries={[`/trend${search}`]}>
-        <TrendPage
-          hierarchy={hierarchy}
-          selection={{ plantId, unitId, equipmentId }}
-        />
+        <TestTrend />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -176,7 +186,11 @@ it("Plant와 Equipment Group을 선택하고 설비는 선택하지 않으면 �
 
 it("viewId가 있으면 일반 선택 파라미터보다 저장된 센서별 기간을 우선한다", async () => {
   renderTrend(
-    "?viewId=e6d7f434-5d9a-4e6d-b4c4-0f72fbb74092&equip_id=P2&sensor_id=ignored",
+    "?viewId=e6d7f434-5d9a-4e6d-b4c4-0f72fbb74092&equip_id=P2&sensor_id=ignored&from=2026-10-01&to=2026-10-05",
+    "P-1101A",
+    "P-01",
+    "P-01-P1",
+    ["P1101A-VIB", "P1101A-TEMP"],
   );
   await waitFor(() =>
     expect(
@@ -197,13 +211,137 @@ it("viewId가 있으면 일반 선택 파라미터보다 저장된 센서별 기
   );
 });
 
+it("저장된 View에서도 선택한 센서 차트만 표시한다", async () => {
+  renderTrend(
+    "?viewId=e6d7f434-5d9a-4e6d-b4c4-0f72fbb74092",
+    "P-1101A",
+    "P-01",
+    "P-01-P1",
+    ["P1101A-TEMP"],
+  );
+  await waitFor(() =>
+    expect(trendQuery).toHaveBeenCalledWith(
+      "P1101A-TEMP",
+      "2026-11-07T00:00:00+09:00",
+      "2026-11-08T00:00:00+09:00",
+      expect.any(String),
+    ),
+  );
+  expect(trendQuery).not.toHaveBeenCalledWith(
+    "P1101A-VIB",
+    expect.anything(),
+    expect.anything(),
+    expect.anything(),
+  );
+});
+
+it("저장된 복수 센서의 기간을 변경하고 원래 개별 기간으로 복원한다", async () => {
+  renderTrend(
+    "?viewId=e6d7f434-5d9a-4e6d-b4c4-0f72fbb74092",
+    "P-1101A",
+    "P-01",
+    "P-01-P1",
+    ["P1101A-VIB", "P1101A-TEMP"],
+  );
+  await screen.findByText("저장 당시 확정된 센서별 조회 기간을 표시합니다.");
+  vi.clearAllMocks();
+  fireEvent.change(screen.getByLabelText("시작 일자"), {
+    target: { value: "2026-11-02T00:00:00" },
+  });
+  expect(
+    screen.getByText("선택한 공통 기간을 센서 차트에 적용합니다."),
+  ).toBeInTheDocument();
+  expect(trendQuery).toHaveBeenCalledWith(
+    "P1101A-VIB",
+    "2026-11-02T00:00:00+09:00",
+    "2026-11-08T00:00:00+09:00",
+    expect.any(String),
+  );
+  expect(trendQuery).toHaveBeenCalledWith(
+    "P1101A-TEMP",
+    "2026-11-02T00:00:00+09:00",
+    "2026-11-08T00:00:00+09:00",
+    expect.any(String),
+  );
+  vi.clearAllMocks();
+  fireEvent.click(screen.getByRole("button", { name: "저장된 기간 복원" }));
+  expect(trendQuery).toHaveBeenCalledWith(
+    "P1101A-TEMP",
+    "2026-11-07T00:00:00+09:00",
+    "2026-11-08T00:00:00+09:00",
+    expect.any(String),
+  );
+});
+
 it("일반 URL에서 설비만 지정하면 그 설비의 센서를 모두 조회한다", () => {
   const asset = hierarchy.equipment.find((item) => item.id === "P-1101A")!;
-  renderTrend("?equip_id=P-1101A");
+  renderTrend(
+    "?equip_id=P-1101A",
+    "P-1101A",
+    "P-01",
+    "P-01-P1",
+    asset.tags.map((tag) => tag.id),
+  );
   expect(
-    screen.getByText(`${asset.name} 전체 센서 트렌드`),
+    screen.getByText(`${asset.name} 선택 센서 트렌드`),
   ).toBeInTheDocument();
   expect(trendQuery).toHaveBeenCalledTimes(asset.tags.length);
+});
+
+it("복수 선택한 센서 차트만 조회하고 선택 해제 시 차트를 비운다", () => {
+  const { unmount } = renderTrend(
+    "?equip_id=P-1101A",
+    "P-1101A",
+    "P-01",
+    "P-01-P1",
+    ["P1101A-VIB", "P1101A-TEMP"],
+  );
+  expect(trendQuery).toHaveBeenCalledTimes(2);
+  expect(trendQuery).toHaveBeenCalledWith(
+    "P1101A-VIB",
+    expect.any(String),
+    expect.any(String),
+    expect.any(String),
+  );
+  expect(trendQuery).toHaveBeenCalledWith(
+    "P1101A-TEMP",
+    expect.any(String),
+    expect.any(String),
+    expect.any(String),
+  );
+  unmount();
+  vi.clearAllMocks();
+  renderTrend("?equip_id=P-1101A&sensor_id=", "P-1101A", "P-01", "P-01-P1", []);
+  expect(screen.getByText("선택된 센서가 없습니다")).toBeInTheDocument();
+  expect(trendQuery).not.toHaveBeenCalled();
+});
+
+it("복수 센서에서도 날짜와 조회 간격을 변경한다", () => {
+  renderTrend(
+    "?equip_id=P-1101A&from=2026-11-01&to=2026-11-05",
+    "P-1101A",
+    "P-01",
+    "P-01-P1",
+    ["P1101A-VIB", "P1101A-TEMP"],
+  );
+  fireEvent.change(screen.getByLabelText("시작 일자"), {
+    target: { value: "2026-11-02T00:00:00" },
+  });
+  fireEvent.change(screen.getByLabelText("조회 간격"), {
+    target: { value: "1h" },
+  });
+  expect(trendQuery).toHaveBeenCalledWith(
+    "P1101A-VIB",
+    "2026-11-02T00:00:00+09:00",
+    "2026-11-05T23:59:59+09:00",
+    "1h",
+  );
+  expect(trendQuery).toHaveBeenCalledWith(
+    "P1101A-TEMP",
+    "2026-11-02T00:00:00+09:00",
+    "2026-11-05T23:59:59+09:00",
+    "1h",
+  );
 });
 
 it("잘못된 viewId는 조회하지 않고 오류를 표시한다", () => {

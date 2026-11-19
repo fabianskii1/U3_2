@@ -9,13 +9,19 @@ afterEach(() => {
     plantId: null,
     unitId: null,
     equipmentId: null,
+    sensorIds: [],
   });
 });
 
 it("저장된 View의 계층 선택을 전역 상태로 동기화한다", async () => {
   const { rerender } = render(
     <SelectionUrlSync
-      selection={{ plantId: "P-01", unitId: "P-01-P1", equipmentId: "P-1101A" }}
+      selection={{
+        plantId: "P-01",
+        unitId: "P-01-P1",
+        equipmentId: "P-1101A",
+        sensorIds: ["P1101A-VIB"],
+      }}
     />,
   );
   await waitFor(() =>
@@ -23,11 +29,17 @@ it("저장된 View의 계층 선택을 전역 상태로 동기화한다", async 
       plantId: "P-01",
       unitId: "P-01-P1",
       equipmentId: "P-1101A",
+      sensorIds: ["P1101A-VIB"],
     }),
   );
   rerender(
     <SelectionUrlSync
-      selection={{ plantId: "P-01", unitId: "P-01-P1", equipmentId: null }}
+      selection={{
+        plantId: "P-01",
+        unitId: "P-01-P1",
+        equipmentId: null,
+        sensorIds: [],
+      }}
     />,
   );
   await waitFor(() =>

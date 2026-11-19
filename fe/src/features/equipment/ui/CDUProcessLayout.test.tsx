@@ -11,6 +11,7 @@ const emptySelection: Selection = {
   plantId: null,
   unitId: null,
   equipmentId: null,
+  sensorIds: [],
 };
 
 afterEach(cleanup);
@@ -32,6 +33,9 @@ describe("CDUProcessLayout", () => {
       plantId: "P-02",
       unitId: "P-02-P3",
       equipmentId: "P-2301A",
+      sensorIds: demoHierarchy.equipment
+        .find((item) => item.id === "P-2301A")!
+        .tags.map((tag) => tag.id),
     });
   });
 
@@ -66,6 +70,7 @@ describe("CDUProcessLayout", () => {
       plantId: "CDU",
       unitId: "CDU-01",
       equipmentId: "P1",
+      sensorIds: equipment.tags.map((tag) => tag.id),
     });
     expect(screen.queryByRole("button", { name: /P2.*선택/ })).toBeNull();
   });

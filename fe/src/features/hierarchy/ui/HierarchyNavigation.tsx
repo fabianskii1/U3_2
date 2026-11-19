@@ -47,7 +47,12 @@ export function HierarchyNavigation({
         <button
           className={`tree-row all-row ${!selection.plantId ? "selected" : ""}`}
           onClick={() =>
-            onSelect({ plantId: null, unitId: null, equipmentId: null })
+            onSelect({
+              plantId: null,
+              unitId: null,
+              equipmentId: null,
+              sensorIds: [],
+            })
           }
         >
           <Layers size={15} />
@@ -75,6 +80,7 @@ export function HierarchyNavigation({
                     plantId: plant.id,
                     unitId: null,
                     equipmentId: null,
+                    sensorIds: [],
                   })
                 }
               >
@@ -107,6 +113,7 @@ export function HierarchyNavigation({
                               plantId: plant.id,
                               unitId: unit.id,
                               equipmentId: null,
+                              sensorIds: [],
                             })
                           }
                         >
@@ -131,6 +138,7 @@ export function HierarchyNavigation({
                                     plantId: e.plantId,
                                     unitId: e.unitId,
                                     equipmentId: e.id,
+                                    sensorIds: [],
                                   })
                                 }
                               >

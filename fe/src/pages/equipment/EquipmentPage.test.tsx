@@ -20,6 +20,7 @@ function renderPage(processType: string | null, unitId: string | null) {
     plantId: "P-01",
     unitId,
     equipmentId: null,
+    sensorIds: [],
   };
   render(
     <QueryClientProvider client={new QueryClient()}>

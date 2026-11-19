@@ -1,15 +1,33 @@
 import type { Selection, Hierarchy } from "../../features/hierarchy/index.ts";
 
-export function savedTrendSelection(view: {
-  plantId: string;
-  equipmentGroupId: string;
-  equipmentId: string | null;
-}): Selection {
+export function savedTrendSelection(
+  view: {
+    plantId: string;
+    equipmentGroupId: string;
+    equipmentId: string | null;
+    config: { series: { sensorId: string }[] };
+  },
+  params = new URLSearchParams(),
+): Selection {
   return {
     plantId: view.plantId,
     unitId: view.equipmentGroupId,
     equipmentId: view.equipmentId,
+    sensorIds: selectedSensorIds(
+      params,
+      view.config.series.map((item) => item.sensorId),
+      "selected_sensor_id",
+    ),
   };
+}
+
+function selectedSensorIds(
+  params: URLSearchParams,
+  available: string[],
+  key = "sensor_id",
+) {
+  const requested = params.has(key) ? params.getAll(key) : available;
+  return [...new Set(requested.filter((id) => available.includes(id)))];
 }
 
 export function resolveSelection(
@@ -22,12 +40,26 @@ export function resolveSelection(
       plantId: equipment.plantId,
       unitId: equipment.unitId,
       equipmentId: equipment.id,
+      sensorIds: selectedSensorIds(
+        params,
+        equipment.tags.map((tag) => tag.id),
+      ),
     };
   const unit = data.units.find((u) => u.id === params.get("unit_id"));
   if (unit)
-    return { plantId: unit.plantId, unitId: unit.id, equipmentId: null };
+    return {
+      plantId: unit.plantId,
+      unitId: unit.id,
+      equipmentId: null,
+      sensorIds: [],
+    };
   const plant = data.plants.find((p) => p.id === params.get("plant_id"));
-  return { plantId: plant?.id ?? null, unitId: null, equipmentId: null };
+  return {
+    plantId: plant?.id ?? null,
+    unitId: null,
+    equipmentId: null,
+    sensorIds: [],
+  };
 }
 export function selectionParams(
   selection: Selection,
@@ -40,6 +72,7 @@ export function selectionParams(
     "equip_id",
     "sensor",
     "sensor_id",
+    "selected_sensor_id",
     "viewId",
     "page",
   ])
@@ -47,6 +80,10 @@ export function selectionParams(
   if (selection.plantId) p.set("plant_id", selection.plantId);
   if (selection.unitId) p.set("unit_id", selection.unitId);
   if (selection.equipmentId) p.set("equip_id", selection.equipmentId);
+  if (selection.equipmentId) {
+    if (selection.sensorIds.length === 0) p.append("sensor_id", "");
+    else selection.sensorIds.forEach((id) => p.append("sensor_id", id));
+  }
   return p;
 }
 export function internalHref(href: string) {
