@@ -1,11 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate, useSearchParams } from "react-router";
-import { Plus, FileText, ArrowUpRight } from "lucide-react";
+import { Link, useSearchParams } from "react-router";
+import { Plus, FileText, ArrowUpRight, FlaskConical } from "lucide-react";
 import type { Hierarchy, Selection } from "../../features/hierarchy/index.ts";
 import {
   reportsQuery,
   useReportDraftStore,
+  type Report,
 } from "../../features/reports/index.ts";
+import { readBrowserReports } from "../../features/reports/api/reports.api.ts";
+import {
+  finalCause,
+  reportStatusLabels,
+} from "../../features/reports/model/maintenance-report.ts";
 import { Card } from "../../shared/ui/card.tsx";
 import { Button } from "../../shared/ui/button.tsx";
 import { Badge } from "../../shared/ui/badge.tsx";
@@ -18,8 +24,11 @@ import {
   validDateRange,
 } from "../../shared/lib/date-time.ts";
 import { ErrorState } from "../../shared/ui/ErrorState.tsx";
+import { LoadingState } from "../../shared/ui/LoadingState.tsx";
 import { errorMessage } from "../../shared/api/http-client.ts";
 import { remoteApi } from "../../shared/api/be-adapter.ts";
+import "../../features/reports/ui/maintenance-report.css";
+
 export function ReportListPage({
   hierarchy,
   selection,
@@ -29,16 +38,16 @@ export function ReportListPage({
 }) {
   const query = useQuery(reportsQuery);
   const drafts = useReportDraftStore((s) => s.drafts);
-  const create = useReportDraftStore((s) => s.createDraft);
-  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const range = defaultRange();
   const from = params.get("from") ?? range.from;
   const to = params.get("to") ?? range.to;
-  const merged = new Map(
-    (query.data ?? []).map((r) => [r.id, { ...r, status: "서버 저장됨" }]),
+  const merged = new Map<string, Report>(
+    (query.data ?? []).map((r) => [r.id, r]),
   );
-  for (const d of remoteApi ? [] : Object.values(drafts)) {
+  if (remoteApi)
+    for (const report of readBrowserReports()) merged.set(report.id, report);
+  for (const d of Object.values(drafts)) {
     if (d.serverId) merged.delete(d.serverId);
     merged.set(d.id, {
       id: d.id,
@@ -46,14 +55,6 @@ export function ReportListPage({
       values: d.values,
       version: d.serverVersion,
       updatedAt: d.updatedAt,
-      status:
-        d.saveStatus === "conflict"
-          ? "충돌"
-          : d.saveStatus === "error"
-            ? "저장 실패"
-            : d.localRevision !== d.savedRevision
-              ? "편집 중"
-              : "저장됨",
     });
   }
   const data = [...merged.values()]
@@ -69,38 +70,52 @@ export function ReportListPage({
       );
     })
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const selectionQuery = selection.equipmentId
+    ? `equip_id=${encodeURIComponent(selection.equipmentId)}`
+    : selection.unitId
+      ? `unit_id=${encodeURIComponent(selection.unitId)}`
+      : selection.plantId
+        ? `plant_id=${encodeURIComponent(selection.plantId)}`
+        : "";
+  const href = (id: string) =>
+    `/reports/${encodeURIComponent(id)}${selectionQuery ? `?${selectionQuery}` : ""}`;
   return (
-    <div className="page">
+    <div className="page maintenance-report-list">
       <div className="page-heading">
         <div>
           <div className="eyebrow">MAINTENANCE JOURNAL</div>
-          <h1>진단 보고서</h1>
-          <p>현장의 기록과 분석을 하나의 보고서로 관리하세요.</p>
+          <h1>정비 보고서</h1>
+          <p>
+            알람과 진단부터 현장 확인, 실제 정비까지 하나의 기록으로 관리하세요.
+          </p>
         </div>
-        {!remoteApi && hierarchy.equipment.length > 0 && (
-          <Button
-            onClick={() => {
-              const eq =
-                hierarchy.equipment.find(
-                  (e) => e.id === selection.equipmentId,
-                ) ?? hierarchy.equipment[0];
-              const id = create(eq.id, { title: `${eq.name} 점검 보고서` });
-              navigate(`/reports/${id}`);
-            }}
-          >
-            <Plus size={15} />새 보고서
-          </Button>
+        {hierarchy.equipment.length > 0 && (
+          <div className="inline mr-list-actions">
+            <Button variant="outline" asChild>
+              <Link to={`/reports/new?sample=1&${selectionQuery}`}>
+                <FlaskConical size={14} />
+                예시 보고서 열기
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link to={`/reports/new?${selectionQuery}`}>
+                <Plus size={15} />새 보고서
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
-      {!remoteApi && (
-        <div className="report-tip">
-          <FileText size={18} />
-          <div>
-            <strong>이동해도, 닫아도 작성 내용은 유지됩니다.</strong>
-            <p>초안은 브라우저에 즉시 보관되고 Mock 서버에 자동 저장됩니다.</p>
-          </div>
+      <div className="report-tip">
+        <FileText size={20} />
+        <div>
+          <strong>AI의 추정과 현장의 확정 결과를 구분해 기록합니다.</strong>
+          <p>
+            {remoteApi
+              ? "확장 보고서는 이 브라우저에 저장됩니다. 서버 저장·공유 API는 아직 연결되지 않았습니다."
+              : "프론트 예시 모드입니다. 작성 내용은 브라우저에 복구되고 임시 저장 시 Mock 저장소에 보관됩니다."}
+          </p>
         </div>
-      )}
+      </div>
       <Card>
         <div className="filter-bar">
           <span className="small muted">최근 수정 일자</span>
@@ -115,14 +130,16 @@ export function ReportListPage({
             }}
           />
         </div>
-        {query.isError ? (
+        {query.isError && (
           <ErrorState
-            message={errorMessage(query.error)}
+            message={`${errorMessage(query.error)} · 브라우저에 남은 보고서는 계속 확인할 수 있습니다.`}
             retry={() => void query.refetch()}
           />
-        ) : null}
+        )}
         {!validDateRange(from, to) ? (
           <ErrorState message="조회 기간을 확인하세요." />
+        ) : query.isPending && !data.length ? (
+          <LoadingState />
         ) : (
           <DataTable
             label="보고서 목록"
@@ -130,14 +147,23 @@ export function ReportListPage({
             columns={[
               {
                 accessorKey: "values.title",
-                header: "보고서",
+                header: "보고서 ID · 제목",
                 cell: ({ row }) => (
                   <Link
                     className="equipment-link"
-                    to={`/reports/${row.original.id}`}
+                    to={href(row.original.id)}
+                    title={row.original.id}
                   >
                     {row.original.values.title || "제목 없는 보고서"}
-                    <small>{row.original.id.slice(0, 8)}</small>
+                    <small>
+                      {row.original.id.length > 12
+                        ? `RPT-${row.original.id.slice(0, 8)}`
+                        : row.original.id}
+                      {row.original.values.maintenance?.original.kind ===
+                      "example"
+                        ? " · 예시"
+                        : ""}
+                    </small>
                   </Link>
                 ),
               },
@@ -145,32 +171,75 @@ export function ReportListPage({
                 accessorKey: "equipmentId",
                 header: "대상 설비",
                 cell: ({ row }) => (
-                  <span>
-                    {hierarchy.equipment.find(
-                      (e) => e.id === row.original.equipmentId,
-                    )?.name ?? row.original.equipmentId}
+                  <span className="equipment-link">
+                    {row.original.values.maintenance?.incident.equipmentName ||
+                      hierarchy.equipment.find(
+                        (e) => e.id === row.original.equipmentId,
+                      )?.name ||
+                      row.original.equipmentId}
+                    <small>{row.original.equipmentId}</small>
                   </span>
                 ),
               },
               {
-                accessorKey: "status",
-                header: "상태",
-                cell: ({ row }) => (
-                  <Badge
-                    tone={
-                      row.original.status === "충돌" ||
-                      row.original.status === "저장 실패"
-                        ? "High"
-                        : "neutral"
-                    }
-                  >
-                    {row.original.status}
-                  </Badge>
-                ),
+                id: "alarm",
+                header: "발생 알람",
+                accessorFn: (r) =>
+                  r.values.maintenance?.incident.alarmId || "미연결",
               },
               {
-                accessorKey: "updatedAt",
-                header: "최근 수정",
+                id: "cause",
+                header: "진단 · 최종 원인",
+                cell: ({ row }) => {
+                  const m = row.original.values.maintenance;
+                  const confirmed = !!m?.diagnosis.final.confirmedAt;
+                  return (
+                    <span className="equipment-link">
+                      {confirmed
+                        ? finalCause(m!)
+                        : m?.original.aiCandidates[0]?.label ||
+                          row.original.values.cause ||
+                          "원인 미확정"}
+                      <small>
+                        {confirmed
+                          ? "현장 확정"
+                          : m?.original.aiCandidates.length
+                            ? "AI 1순위 · 현장 미확정"
+                            : row.original.values.cause
+                              ? "이전 보고서 기록 · 확정 여부 미확인"
+                              : "현장 확인 필요"}
+                      </small>
+                    </span>
+                  );
+                },
+              },
+              {
+                id: "status",
+                header: "작성 상태",
+                accessorFn: (r) => r.values.maintenance?.status ?? "draft",
+                cell: ({ row }) => {
+                  const status =
+                    row.original.values.maintenance?.status ?? "draft";
+                  return (
+                    <Badge
+                      tone={
+                        status === "confirmed"
+                          ? "success"
+                          : status === "review"
+                            ? "Medium"
+                            : "neutral"
+                      }
+                    >
+                      {reportStatusLabels[status]}
+                    </Badge>
+                  );
+                },
+              },
+              {
+                id: "createdAt",
+                header: "작성일",
+                accessorFn: (r) =>
+                  r.values.maintenance?.createdAt ?? r.updatedAt,
                 cell: ({ getValue }) => (
                   <span className="small mono">
                     {dateTime(String(getValue()))}
@@ -182,8 +251,8 @@ export function ReportListPage({
                 header: "",
                 cell: ({ row }) => (
                   <Link
-                    aria-label="보고서 열기"
-                    to={`/reports/${row.original.id}`}
+                    aria-label={`${row.original.values.title || "보고서"} 열기`}
+                    to={href(row.original.id)}
                   >
                     <ArrowUpRight size={16} />
                   </Link>

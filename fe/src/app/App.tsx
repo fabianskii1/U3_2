@@ -7,7 +7,6 @@ import {
   useSearchParams,
   useNavigate,
   useLocation,
-  useParams,
 } from "react-router";
 import {
   hierarchyQuery,
@@ -16,7 +15,6 @@ import {
 } from "../features/hierarchy/index.ts";
 import { alarmsQuery } from "../features/alarms/index.ts";
 import { remoteApi } from "../shared/api/be-adapter.ts";
-import { reportQuery } from "../features/reports/api/reports.api.ts";
 import { AppLayout } from "./layouts/AppLayout.tsx";
 import { SelectionUrlSync } from "./integrations/SelectionUrlSync.tsx";
 import { ReportAutosaveBridge } from "./integrations/ReportAutosaveBridge.tsx";
@@ -207,19 +205,11 @@ export function App() {
             />
             <Route
               path="/reports/new"
-              element={
-                remoteApi ? (
-                  <ErrorState message="보고서 작성은 아직 지원하지 않습니다." />
-                ) : (
-                  <NewReport hierarchy={data} selection={selection} />
-                )
-              }
+              element={<NewReport hierarchy={data} selection={selection} />}
             />
             <Route
               path="/reports/:reportId"
-              element={
-                remoteApi ? <RemoteReport /> : <Editor hierarchy={data} />
-              }
+              element={<Editor hierarchy={data} />}
             />
             <Route
               path="*"
@@ -236,36 +226,5 @@ export function App() {
         </Suspense>
       </AppLayout>
     </>
-  );
-}
-
-function RemoteReport() {
-  const { reportId = "" } = useParams();
-  const report = useQuery(reportQuery(reportId));
-  if (report.isPending) return <LoadingState />;
-  if (report.isError)
-    return (
-      <ErrorState
-        message={errorMessage(report.error)}
-        retry={() => void report.refetch()}
-      />
-    );
-  const { values } = report.data;
-  return (
-    <div className="page">
-      <h1>{values.title}</h1>
-      <p>보고서 조회 전용 · 편집 기능은 준비 중입니다.</p>
-      <h2>증상</h2>
-      <p>{values.symptom || "—"}</p>
-      <h2>원인</h2>
-      <p>{values.cause || "—"}</p>
-      <h2>조치</h2>
-      <p>{values.action || "—"}</p>
-      <h2>잔여 위험</h2>
-      <p>{values.risk || "—"}</p>
-      <Button asChild variant="outline">
-        <Link to="/reports">목록으로</Link>
-      </Button>
-    </div>
   );
 }
