@@ -1,12 +1,17 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { Hierarchy, Selection } from "../../features/hierarchy/index.ts";
 import type { Alarm } from "../../features/alarms/index.ts";
 import { CDUProcessLayout } from "../../features/equipment/ui/CDUProcessLayout.tsx";
 import { EquipmentCards } from "../../features/equipment/ui/EquipmentCards.tsx";
 import { EquipmentFeed } from "../../features/equipment/ui/EquipmentFeed.tsx";
+import { EquipmentReplayControls } from "../../features/equipment/ui/EquipmentReplayControls.tsx";
+import {
+  CONSOLE_EXAMPLE_HOUR,
+  consoleHourDate,
+  hasConsoleTimeline,
+} from "../../features/equipment/model/equipment-alarm-state.ts";
 import { Card } from "../../shared/ui/card.tsx";
 import { IncidentPanel } from "../../features/incidents/index.ts";
-import { remoteApi } from "../../shared/api/be-adapter.ts";
 
 const Pump3D = lazy(() =>
   import("../../features/equipment/ui/Pump3D.tsx").then((module) => ({
@@ -25,6 +30,9 @@ export function EquipmentPage({
   alarms: Alarm[];
   onSelect: (s: Selection) => void;
 }) {
+  const [replayHour, setReplayHour] = useState<number | null>(
+    CONSOLE_EXAMPLE_HOUR,
+  );
   const unit = hierarchy.units.find((u) => u.id === selection.unitId);
   const equipment = unit
     ? hierarchy.equipment.filter((item) => item.unitId === unit.id)
@@ -32,13 +40,21 @@ export function EquipmentPage({
   const selectedEquipment = hierarchy.equipment.find(
     (item) => item.id === selection.equipmentId,
   );
+  const activeReplayHour =
+    unit?.processType === "CDU" && equipment.some(hasConsoleTimeline)
+      ? replayHour
+      : null;
   return (
     <div className="page">
+      {unit?.processType === "CDU" && equipment.some(hasConsoleTimeline) && (
+        <EquipmentReplayControls hour={replayHour} onChange={setReplayHour} />
+      )}
       {unit?.processType === "CDU" ? (
         <CDUProcessLayout
           hierarchy={hierarchy}
           selection={selection}
-          alarms={remoteApi ? [] : alarms}
+          alarms={alarms}
+          replayHour={activeReplayHour}
           onSelect={onSelect}
         />
       ) : unit ? (
@@ -57,6 +73,8 @@ export function EquipmentPage({
         <EquipmentCards
           groupName={unit.name}
           equipment={equipment}
+          alarms={alarms}
+          replayHour={activeReplayHour}
           selectedEquipmentId={selection.equipmentId}
           onSelect={onSelect}
         />
@@ -70,7 +88,8 @@ export function EquipmentPage({
           <Pump3D
             key={selectedEquipment.id}
             equipment={selectedEquipment}
-            alarms={remoteApi ? [] : alarms}
+            alarms={alarms}
+            replayHour={activeReplayHour}
           />
         </Suspense>
       )}
@@ -78,7 +97,13 @@ export function EquipmentPage({
         <IncidentPanel
           title="이상 사건"
           description="선택한 설비의 최근 사건 · 진단은 추정"
-          filters={{ equipment_id: selection.equipmentId }}
+          filters={{
+            equipment_id: selection.equipmentId,
+            as_of:
+              activeReplayHour == null
+                ? undefined
+                : consoleHourDate(activeReplayHour).toISOString(),
+          }}
           emptyText="이 설비에 기록된 이상 사건이 없습니다."
           moreHref={`/incidents?equip_id=${encodeURIComponent(selection.equipmentId)}`}
         />

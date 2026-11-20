@@ -15,6 +15,8 @@ export const alarmSchema = z.object({
   reason: z.string(),
   incidentId: z.string().optional(),
   peakLevel: z.number().int().min(0).max(4).optional(),
+  isActive: z.boolean().nullable().optional(),
+  endedAt: z.string().nullable().optional(),
 });
 export const alarmsResponseSchema = z.object({
   alarms: z.array(alarmSchema),

@@ -74,4 +74,36 @@ describe("CDUProcessLayout", () => {
     });
     expect(screen.queryByRole("button", { name: /P2.*선택/ })).toBeNull();
   });
+
+  it("shows an active predicted alarm level on the pump", () => {
+    const equipment = demoHierarchy.equipment.find(
+      (item) => item.id === "P-1101A",
+    )!;
+    render(
+      <CDUProcessLayout
+        hierarchy={demoHierarchy}
+        selection={{ ...emptySelection, plantId: "P-01" }}
+        alarms={[
+          {
+            id: "A-1",
+            equipmentId: equipment.id,
+            tagId: equipment.tags[0].id,
+            signal: equipment.tags[0].signal,
+            severity: "Medium",
+            alarmLevel: 2,
+            eventType: "예측",
+            isActive: true,
+            unit: equipment.tags[0].unit,
+            occurredAt: "2026-11-20T00:00:00Z",
+            type: "Setpoint",
+            reason: "예측 경고",
+          },
+        ]}
+        onSelect={vi.fn()}
+      />,
+    );
+    const pump = screen.getByRole("button", { name: /P1.*선택/ });
+    expect(pump).toHaveAttribute("data-level", "2");
+    expect(pump).toHaveAttribute("data-predicted", "true");
+  });
 });

@@ -5,6 +5,7 @@ import type {
   Selection,
 } from "../../../shared/api/contracts/hierarchy.ts";
 import { Card, CardHeader } from "../../../shared/ui/card.tsx";
+import { equipmentAlarmState } from "../model/equipment-alarm-state.ts";
 
 type PumpId = "P1" | "P2" | "P3" | "P4" | "P5" | "P6";
 
@@ -42,29 +43,17 @@ function findPump(
   );
 }
 
-function pumpLevel(equipment: Equipment, alarms: Alarm[]): number {
-  const alarmLevel = Math.max(
-    0,
-    ...alarms
-      .filter((alarm) => alarm.equipmentId === equipment.id)
-      .map(
-        (alarm) =>
-          alarm.alarmLevel ??
-          ({ High: 3, Medium: 2, Low: 1 } as const)[alarm.severity],
-      ),
-  );
-  return Math.max(equipment.equipmentStatus ?? 0, alarmLevel);
-}
-
 export function CDUProcessLayout({
   hierarchy,
   selection,
   alarms,
+  replayHour,
   onSelect,
 }: {
   hierarchy: Hierarchy;
   selection: Selection;
   alarms: Alarm[];
+  replayHour?: number | null;
   onSelect: (selection: Selection) => void;
 }) {
   const plantId = selection.plantId ?? hierarchy.plants[0]?.id ?? null;
@@ -73,7 +62,11 @@ export function CDUProcessLayout({
     <Card className="process-layout">
       <CardHeader
         title="공정 배치도"
-        description="펌프 색은 현재 상태를 나타냅니다. 펌프를 선택하면 설비 상세로 이동합니다."
+        description={
+          replayHour == null
+            ? "펌프 색은 현재 상태를 나타냅니다. 펌프를 선택하면 설비 상세로 이동합니다."
+            : "펌프 색은 선택한 기록 시각의 단계입니다. 펌프를 선택하면 설비 상세로 이동합니다."
+        }
       />
       <div className="process-layout-scroll">
         <svg viewBox="0 0 760 340" role="group" aria-label="CDU 공정 배치도">
@@ -219,13 +212,16 @@ export function CDUProcessLayout({
           </text>
           {pumps.map((pump) => {
             const equipment = findPump(pump.id, hierarchy.equipment, plantId);
-            const level = equipment ? pumpLevel(equipment, alarms) : null;
+            const status = equipment
+              ? equipmentAlarmState(equipment, alarms, replayHour)
+              : null;
             return (
               <g
                 key={pump.id}
                 className={`process-pump ${equipment ? "is-interactive" : ""} ${selection.equipmentId === equipment?.id ? "is-selected" : ""}`}
                 data-pump={pump.id}
-                data-level={level ?? "unknown"}
+                data-level={status?.level ?? "unknown"}
+                data-predicted={status?.predicted || undefined}
                 role={equipment ? "button" : undefined}
                 tabIndex={equipment ? 0 : undefined}
                 aria-label={`${pump.id}${equipment ? ` ${equipment.name} 선택` : " 설비 없음"}`}

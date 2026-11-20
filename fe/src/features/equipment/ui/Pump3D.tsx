@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -9,6 +9,11 @@ import type { Alarm } from "../../../shared/api/contracts/alarm.ts";
 import { incidentsQuery } from "../../incidents/api/incidents.queries.ts";
 import { Card, CardHeader } from "../../../shared/ui/card.tsx";
 import { faultParts, pumpParts } from "./pump3d.config.ts";
+import {
+  consoleHourDate,
+  equipmentAlarmState,
+  levelLabels,
+} from "../model/equipment-alarm-state.ts";
 
 type ViewMode = "all" | "ghost" | "only";
 type PartMesh = {
@@ -303,40 +308,38 @@ function sensorPart(signal: string, name: string): string | null {
 export function Pump3D({
   equipment,
   alarms,
+  replayHour,
 }: {
   equipment: Equipment;
   alarms: Alarm[];
+  replayHour?: number | null;
 }) {
   const [mode, setMode] = useState<ViewMode>("all");
   const incidentQuery = useQuery(
-    incidentsQuery({ equipment_id: equipment.id, limit: 20 }),
+    incidentsQuery({
+      equipment_id: equipment.id,
+      as_of:
+        replayHour == null
+          ? undefined
+          : consoleHourDate(replayHour).toISOString(),
+      limit: 20,
+    }),
   );
   const incident =
     incidentQuery.data?.items.find((item) => item.status === "ongoing") ?? null;
+  const status = equipmentAlarmState(equipment, alarms, replayHour);
   const diagnosisParts = faultParts[incident?.diagnosis ?? ""] ?? [];
   const riskParts =
     incident && incident.top_risk_fault !== incident.diagnosis
       ? (faultParts[incident.top_risk_fault] ?? [])
       : [];
-  const sensorHighlights = useMemo(
-    () =>
-      alarms
-        .filter((alarm) => alarm.equipmentId === equipment.id)
-        .map((alarm) => ({
-          part: sensorPart(
-            alarm.signal,
-            equipment.tags.find((tag) => tag.id === alarm.tagId)?.name ?? "",
-          ),
-          level:
-            alarm.alarmLevel ??
-            ({ High: 3, Medium: 2, Low: 1 } as const)[alarm.severity],
-          name:
-            equipment.tags.find((tag) => tag.id === alarm.tagId)?.name ??
-            alarm.signal,
-        }))
-        .filter((entry) => entry.part !== null),
-    [alarms, equipment],
-  );
+  const sensorHighlights = equipment.tags
+    .map((tag) => ({
+      part: sensorPart(tag.signal, tag.name),
+      level: status.sensorLevels.get(tag.id) ?? 0,
+      name: tag.name,
+    }))
+    .filter((entry) => entry.part !== null && entry.level > 0);
   const red = [
     ...new Set([
       ...diagnosisParts,
@@ -395,13 +398,16 @@ export function Pump3D({
         <PumpModel
           red={red}
           amber={amber}
-          pulse={red.length > 0 && (equipment.equipmentStatus ?? 0) >= 2}
+          pulse={red.length > 0 && status.level >= 2}
           mode={mode}
         />
         <div className="pump-3d-info">
           <p>
             <strong>{equipment.name}</strong> ·{" "}
-            {equipment.equipmentStatus ? "점검 필요" : "정상"}
+            <span className="equipment-status-badge" data-level={status.level}>
+              {levelLabels[status.level] ?? "정상"}
+              {status.predicted ? " (예측)" : ""}
+            </span>
           </p>
           {incidentQuery.isPending ? (
             <p className="muted small">진단 정보를 불러오는 중입니다.</p>

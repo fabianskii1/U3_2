@@ -67,6 +67,8 @@ describe("BE 응답 변환", () => {
         alarm_start_time: "2026-11-11T00:00:00Z",
         unit: "mm/s RMS",
         alarm_level: 4,
+        is_active: false,
+        alarm_end_time: "2026-11-11T01:00:00Z",
         user_message: "비상",
       },
       hierarchy,
@@ -75,6 +77,8 @@ describe("BE 응답 변환", () => {
       id: "50",
       alarmLevel: 4,
       signal: "vibration",
+      isActive: false,
+      endedAt: "2026-11-11T01:00:00Z",
     });
   });
 

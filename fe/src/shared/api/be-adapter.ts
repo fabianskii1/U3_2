@@ -61,6 +61,8 @@ const alarm = z.object({
   user_message: z.string(),
   incident_id: z.string().nullish(),
   peak_level: z.number().int().min(0).max(4).nullish(),
+  is_active: z.boolean().nullable().optional(),
+  alarm_end_time: z.string().nullable().optional(),
 });
 const report = z.object({
   report_id: id,
@@ -170,6 +172,8 @@ export function mapAlarm(data: unknown, sensors: Hierarchy): Alarm {
     reason: raw.user_message,
     incidentId: raw.incident_id ?? undefined,
     peakLevel: raw.peak_level ?? undefined,
+    isActive: raw.is_active,
+    endedAt: raw.alarm_end_time,
   };
 }
 export function mapReport(data: unknown): Report {

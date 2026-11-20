@@ -3,19 +3,27 @@ import type {
   Equipment,
   Selection,
 } from "../../../shared/api/contracts/hierarchy.ts";
+import type { Alarm } from "../../../shared/api/contracts/alarm.ts";
 import { dateTime } from "../../../shared/lib/date-time.ts";
-import { Badge } from "../../../shared/ui/badge.tsx";
 import { Card, CardHeader } from "../../../shared/ui/card.tsx";
 import { equipmentQuery } from "../api/equipment.queries.ts";
+import {
+  equipmentAlarmState,
+  levelLabels,
+} from "../model/equipment-alarm-state.ts";
 
 export function EquipmentCards({
   groupName,
   equipment,
+  alarms,
+  replayHour,
   selectedEquipmentId,
   onSelect,
 }: {
   groupName: string;
   equipment: Equipment[];
+  alarms: Alarm[];
+  replayHour?: number | null;
   selectedEquipmentId: string | null;
   onSelect: (selection: Selection) => void;
 }) {
@@ -27,7 +35,7 @@ export function EquipmentCards({
     <Card className="equipment-cards-panel">
       <CardHeader
         title="설비 및 센서"
-        description={`${groupName} · 설비 ${equipment.length}대 · 최근 저장된 센서값`}
+        description={`${groupName} · 설비 ${equipment.length}대 · ${replayHour == null ? "현재 상태" : "색은 기록 시각의 단계"} · 센서값은 최근 저장값`}
       />
       {equipment.length === 0 ? (
         <p className="equipment-cards-empty">
@@ -38,13 +46,19 @@ export function EquipmentCards({
           {equipment.map((item, index) => {
             const query = details[index];
             const tags = query.data?.tags ?? item.tags;
+            const status = equipmentAlarmState(
+              query.data ?? item,
+              alarms,
+              replayHour,
+            );
             const selected = item.id === selectedEquipmentId;
             return (
               <button
                 key={item.id}
                 type="button"
                 className={`equipment-summary-card${selected ? " is-selected" : ""}`}
-                data-status={item.equipmentStatus ?? 0}
+                data-status={status.level}
+                data-predicted={status.predicted || undefined}
                 aria-pressed={selected}
                 aria-label={`${item.name} ${item.id} 선택`}
                 onClick={() =>
@@ -61,9 +75,13 @@ export function EquipmentCards({
                     <strong className="equipment-summary-id">{item.id}</strong>
                     <span className="equipment-summary-name">{item.name}</span>
                   </span>
-                  <Badge tone={item.equipmentStatus ? "High" : "success"}>
-                    {item.equipmentStatus ? "점검 필요" : "정상"}
-                  </Badge>
+                  <span
+                    className="equipment-status-badge"
+                    data-level={status.level}
+                  >
+                    {levelLabels[status.level] ?? "정상"}
+                    {status.predicted ? " (예측)" : ""}
+                  </span>
                 </span>
                 {query.isError ? (
                   <span className="equipment-summary-message">
@@ -75,27 +93,43 @@ export function EquipmentCards({
                   </span>
                 ) : null}
                 <span className="equipment-sensor-grid">
-                  {tags.map((tag) => (
-                    <span
-                      className="equipment-sensor-cell"
-                      key={tag.id}
-                      title={
-                        tag.measuredAt
-                          ? `${tag.name} · ${dateTime(tag.measuredAt)} KST`
-                          : tag.name
-                      }
-                    >
-                      <span className="equipment-sensor-name">{tag.name}</span>
-                      <span className="equipment-sensor-value">
-                        {tag.currentValue == null
-                          ? "—"
-                          : tag.currentValue.toLocaleString("ko-KR", {
-                              maximumFractionDigits: 3,
-                            })}
-                        {tag.currentValue != null && <small>{tag.unit}</small>}
+                  {tags.map((tag) => {
+                    const sensorLevel =
+                      replayHour == null
+                        ? Math.max(
+                            tag.sensorLevel ?? 0,
+                            status.sensorLevels.get(tag.id) ?? 0,
+                          )
+                        : (status.sensorLevels.get(tag.id) ?? 0);
+                    const predicted = status.sensorPredictions.has(tag.id);
+                    return (
+                      <span
+                        className="equipment-sensor-cell"
+                        key={tag.id}
+                        data-level={sensorLevel}
+                        data-predicted={predicted || undefined}
+                        title={
+                          tag.measuredAt
+                            ? `${tag.name} · ${dateTime(tag.measuredAt)} KST`
+                            : tag.name
+                        }
+                      >
+                        <span className="equipment-sensor-name">
+                          {tag.name}
+                        </span>
+                        <span className="equipment-sensor-value">
+                          {tag.currentValue == null
+                            ? "—"
+                            : tag.currentValue.toLocaleString("ko-KR", {
+                                maximumFractionDigits: 3,
+                              })}
+                          {tag.currentValue != null && (
+                            <small>{tag.unit}</small>
+                          )}
+                        </span>
                       </span>
-                    </span>
-                  ))}
+                    );
+                  })}
                 </span>
               </button>
             );

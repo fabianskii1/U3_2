@@ -13,6 +13,7 @@ export type IncidentFilters = {
   equipment_id?: string;
   from?: string;
   to?: string;
+  as_of?: string;
   min_level?: string;
   actionable?: string;
   status?: IncidentStatus;

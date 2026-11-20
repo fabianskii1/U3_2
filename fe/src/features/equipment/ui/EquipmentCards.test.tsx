@@ -32,6 +32,7 @@ describe("EquipmentCards", () => {
         <EquipmentCards
           groupName="원유 공급"
           equipment={[equipment]}
+          alarms={[]}
           selectedEquipmentId={null}
           onSelect={onSelect}
         />
@@ -49,5 +50,44 @@ describe("EquipmentCards", () => {
         .find((item) => item.id === "P-1101A")!
         .tags.map((tag) => tag.id),
     });
+  });
+
+  it("colors the card and sensor from a current alarm", () => {
+    const equipment = hierarchy.equipment[0];
+    const queryClient = new QueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <EquipmentCards
+          groupName="원유 공급"
+          equipment={[equipment]}
+          alarms={[
+            {
+              id: "A-1",
+              equipmentId: equipment.id,
+              tagId: equipment.tags[0].id,
+              signal: equipment.tags[0].signal,
+              severity: "Medium",
+              alarmLevel: 2,
+              eventType: "예측",
+              isActive: true,
+              unit: equipment.tags[0].unit,
+              occurredAt: "2026-11-20T00:00:00Z",
+              type: "Setpoint",
+              reason: "예측 경고",
+            },
+          ]}
+          selectedEquipmentId={null}
+          onSelect={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    const card = screen.getByRole("button", { name: /P-1101A 선택/ });
+    expect(card).toHaveAttribute("data-status", "2");
+    expect(card).toHaveAttribute("data-predicted", "true");
+    expect(card).toHaveTextContent("경고 (예측)");
+    expect(card.querySelector(".equipment-sensor-cell")).toHaveAttribute(
+      "data-level",
+      "2",
+    );
   });
 });
