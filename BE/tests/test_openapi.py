@@ -4,6 +4,7 @@ from app.main import app
 def test_openapi_groups_every_endpoint_by_domain():
     schema = app.openapi()
     expected = {
+        "/api/dashboard": "대시보드",
         "/api/hierarchy": "계층",
         "/api/equipment/{equipment_id}": "설비",
         "/api/trend": "시계열",

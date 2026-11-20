@@ -90,12 +90,42 @@ async def _persist_trend_links(db: AsyncSession, reply, session_id: int, message
 
     converted = []
     navigation = reply.navigation_href
+    trend_navigation_valid = False
     for link in reply.links:
         url = urlsplit(link["href"])
         if url.path != "/trend":
             converted.append(link)
             continue
         params = parse_qs(url.query)
+        if params.get("compare") == ["all"] and params.get("compare_sensor", [None])[0] in {
+            "VIB",
+            "TB",
+            "TF",
+            "PS",
+            "PD",
+            "AMP",
+            "RPM",
+            "VOLT",
+        }:
+            group_id = params.get("unit_id", [None])[0]
+            ids = params.get("compare_equipment_id", [])
+            registered = (
+                (
+                    await db.execute(
+                        select(equipment.c.equipment_id).where(
+                            equipment.c.equipment_group_id == group_id,
+                            equipment.c.plant_id == params.get("plant_id", [None])[0],
+                            equipment.c.equipment_id.in_(ids),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if ids and set(ids) == set(registered):
+                converted.append(link)
+                trend_navigation_valid = trend_navigation_valid or navigation == link["href"]
+            continue
         sensor_id = params.get("sensor_id", [None])[0]
         start = params.get("from", [None])[0]
         end = params.get("to", [None])[0]
@@ -126,9 +156,12 @@ async def _persist_trend_links(db: AsyncSession, reply, session_id: int, message
         converted.append({**link, "href": href})
         if navigation == link["href"]:
             navigation = href
+            trend_navigation_valid = True
     reply.links = converted
     reply.navigation_href = (
-        navigation if navigation and urlsplit(navigation).path != "/trend" else None
+        navigation
+        if navigation and (urlsplit(navigation).path != "/trend" or trend_navigation_valid)
+        else None
     )
 
 
@@ -163,6 +196,8 @@ async def _existing_request_response(db: AsyncSession, session_id: int, request_
         yield _sse("message.delta", {"text": message.content})
         for link in delivery.get("links", []):
             yield _sse("citation", link)
+        for choice in delivery.get("choices", []):
+            yield _sse("choice", choice)
         if delivery.get("navigation_href"):
             yield _sse("navigate", {"href": delivery["navigation_href"]})
         yield _sse("done", {"session_detail_id": str(row.session_detail_id)})
@@ -331,6 +366,7 @@ async def chat_stream(
                     "_delivery": {
                         "links": reply.links,
                         "navigation_href": reply.navigation_href,
+                        "choices": reply.choices,
                     },
                 }
             )
@@ -386,6 +422,8 @@ async def chat_stream(
         yield _sse("message.delta", {"text": reply.message})
         for link in reply.links:
             yield _sse("citation", link)
+        for choice in reply.choices:
+            yield _sse("choice", choice)
         if reply.navigation_href:
             yield _sse("navigate", {"href": reply.navigation_href})
         yield _sse("done", {"session_detail_id": str(detail_id)})

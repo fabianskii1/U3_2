@@ -10,6 +10,18 @@ export const chatRequestSchema = z.object({
     equipmentId: z.string().nullable(),
     sensor: z.string().optional(),
     sensorId: z.string().optional(),
+    sensorIds: z.array(z.string()).optional(),
+    alarmId: z.string().optional(),
+    trendSeries: z
+      .array(
+        z.object({
+          sensorId: z.string(),
+          start: z.string(),
+          end: z.string(),
+          label: z.string().optional(),
+        }),
+      )
+      .optional(),
     sensor_interval: z.string().optional(),
     from: z.string().optional(),
     to: z.string().optional(),
@@ -25,6 +37,9 @@ export const chatRequestSchema = z.object({
 });
 export const chatResponseSchema = z.object({
   message: z.string(),
+  choices: z
+    .array(z.object({ label: z.string(), message: z.string() }))
+    .optional(),
   action: z
     .discriminatedUnion("type", [
       z.object({ type: z.literal("navigate"), href: z.string() }),

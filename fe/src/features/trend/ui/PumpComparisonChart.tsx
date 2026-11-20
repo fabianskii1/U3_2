@@ -13,31 +13,12 @@ import type { Hierarchy } from "../../../shared/api/contracts/hierarchy.ts";
 import { Card, CardHeader } from "../../../shared/ui/card.tsx";
 import { trendQuery } from "../api/trend.queries.ts";
 
-type SensorKind = "VIB" | "TB" | "TF" | "PS" | "PD" | "AMP" | "RPM" | "VOLT";
+import {
+  comparisonSensors as sensorKinds,
+  type ComparisonSensorKind as SensorKind,
+} from "../model/comparison-sensors.ts";
+import { intervalLabel, type SensorInterval } from "../model/trend-interval.ts";
 type Mode = "deviation" | "raw";
-
-const sensorKinds: {
-  id: SensorKind;
-  label: string;
-  matches: (name: string) => boolean;
-}[] = [
-  { id: "VIB", label: "진동", matches: (name) => name.includes("진동") },
-  {
-    id: "TB",
-    label: "베어링 온도",
-    matches: (name) => name.includes("베어링 온도"),
-  },
-  {
-    id: "TF",
-    label: "유체 온도",
-    matches: (name) => name.includes("유체 온도"),
-  },
-  { id: "PS", label: "흡입압", matches: (name) => name.includes("흡입압") },
-  { id: "PD", label: "토출압", matches: (name) => name.includes("토출압") },
-  { id: "AMP", label: "전류", matches: (name) => name.includes("전류") },
-  { id: "RPM", label: "RPM", matches: (name) => name.includes("회전수") },
-  { id: "VOLT", label: "전압", matches: (name) => name.includes("전압") },
-];
 
 const pumpColors = [
   "#168b81",
@@ -97,22 +78,36 @@ export function PumpComparisonChart({
   hierarchy,
   plantId,
   unitId,
+  selectedKind,
+  onKindChange,
+  windowRange,
+  interval = "1h",
+  equipmentIds,
 }: {
   hierarchy: Hierarchy;
   plantId: string;
   unitId: string;
+  selectedKind?: SensorKind;
+  onKindChange?: (kind: SensorKind) => void;
+  windowRange?: { from: string; to: string };
+  interval?: SensorInterval;
+  equipmentIds?: string[];
 }) {
-  const [kind, setKind] = useState<SensorKind>("VIB");
+  const [localKind, setKind] = useState<SensorKind>("VIB");
+  const kind = selectedKind ?? localKind;
   const [mode, setMode] = useState<Mode>("deviation");
   const [hiddenPumpIds, setHiddenPumpIds] = useState<string[]>([]);
-  const [range] = useState(comparisonRange);
+  const [defaultRange] = useState(comparisonRange);
+  const range = windowRange ?? defaultRange;
   const group = hierarchy.units.find(
     (unit) => unit.id === unitId && unit.plantId === plantId,
   );
   const pumps = hierarchy.equipment
     .filter(
       (equipment) =>
-        equipment.unitId === group?.id && /^P[1-6]$/.test(equipment.id),
+        equipment.unitId === group?.id &&
+        /^P[1-6]$/.test(equipment.id) &&
+        (!equipmentIds?.length || equipmentIds.includes(equipment.id)),
     )
     .sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
   const sensorKind = sensorKinds.find((item) => item.id === kind)!;
@@ -122,7 +117,7 @@ export function PumpComparisonChart({
   }));
   const queries = useQueries({
     queries: series.map(({ sensor }) =>
-      trendQuery(sensor?.id ?? "", range.from, range.to, "1h"),
+      trendQuery(sensor?.id ?? "", range.from, range.to, interval),
     ),
   });
   const unit = series.find(({ sensor }) => sensor)?.sensor?.unit ?? "";
@@ -149,8 +144,8 @@ export function PumpComparisonChart({
   return (
     <Card className="pump-comparison">
       <CardHeader
-        title={`${sensorKind.label} 비교 (${mode === "deviation" ? "7일 평균 대비" : "실제 값"}${unit ? ` · ${unit}` : ""})`}
-        description={`${group?.name ?? "CDU 그룹"} · 최근 완료된 7일 · 1시간 평균 · 펌프마다 한 선`}
+        title={`${sensorKind.label} 비교 (${mode === "deviation" ? (windowRange ? "기간 평균 대비" : "7일 평균 대비") : "실제 값"}${unit ? ` · ${unit}` : ""})`}
+        description={`${group?.name ?? "CDU 그룹"} · ${windowRange ? `${kstHour(range.from)} ~ ${kstHour(range.to)} KST` : "최근 완료된 7일"} · ${intervalLabel(interval)} 간격 · 펌프마다 한 선`}
       />
       <div className="pump-comparison-controls">
         <div
@@ -163,7 +158,10 @@ export function PumpComparisonChart({
               key={item.id}
               type="button"
               aria-pressed={kind === item.id}
-              onClick={() => setKind(item.id)}
+              onClick={() => {
+                setKind(item.id);
+                onKindChange?.(item.id);
+              }}
             >
               {item.label}
             </button>
@@ -179,7 +177,7 @@ export function PumpComparisonChart({
             aria-pressed={mode === "deviation"}
             onClick={() => setMode("deviation")}
           >
-            7일 평균 대비 차이
+            {windowRange ? "기간" : "7일"} 평균 대비 차이
           </button>
           <button
             type="button"
@@ -245,7 +243,7 @@ export function PumpComparisonChart({
           <div
             className="pump-comparison-chart"
             role="img"
-            aria-label={`${sensorKind.label} P1부터 P6까지 1시간 평균 비교 차트`}
+            aria-label={`${sensorKind.label} P1부터 P6까지 ${intervalLabel(interval)} 평균 비교 차트`}
           >
             <ResponsiveContainer width="100%" height="100%">
               <LineChart

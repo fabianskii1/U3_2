@@ -11,6 +11,7 @@ import {
   FilePenLine,
 } from "lucide-react";
 import { useChatStore } from "../model/chat-session.store.ts";
+import { chatShortcut } from "../model/chat-shortcuts.ts";
 import { sendChat } from "../api/chat.api.ts";
 import type { ChatRequest, ChatResponse } from "../model/chat.schema.ts";
 import { Button } from "../../../shared/ui/button.tsx";
@@ -38,7 +39,31 @@ export function ChatPanel({
     end.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [messages.length, pending]);
   useEffect(() => () => controller.current?.abort(), []);
+  const lastMessage = messages.at(-1);
+  const defaultShortcut = chatShortcut("", lastMessage);
   const send = async (text = input) => {
+    if (pending || (controller.current && !controller.current.signal.aborted))
+      return;
+    const shortcut = chatShortcut(
+      text,
+      useChatStore.getState().messages.at(-1),
+    );
+    if (shortcut?.type === "navigate") {
+      try {
+        await onAction({
+          message: "",
+          action: { type: "navigate", href: shortcut.href },
+        });
+        setInput("");
+      } catch (error) {
+        add({
+          role: "assistant",
+          content: `이동하지 못했습니다. ${errorMessage(error)}`,
+        });
+      }
+      return;
+    }
+    if (shortcut?.type === "choose") text = shortcut.message;
     if (
       !text.trim() ||
       pending ||
@@ -63,6 +88,7 @@ export function ChatPanel({
             ? "보고서 저장이 완료되었습니다."
             : result.message,
         links: result.links,
+        choices: result.choices,
       });
     } catch (error) {
       if (!abort.signal.aborted)
@@ -91,7 +117,9 @@ export function ChatPanel({
       </div>
       <div className="chat-mode">
         <span className="status-dot" />
-        {remoteApi ? "설비 ID 조회 AI 연결됨" : "규칙 기반 Mock 응답 · 실제 AI 미연결"}
+        {remoteApi
+          ? "설비 조회 · 화면 이동 연결됨"
+          : "규칙 기반 Mock 응답 · 실제 AI 미연결"}
       </div>
       {reportTitle ? (
         <div className="chat-report-context">
@@ -118,17 +146,18 @@ export function ChatPanel({
             </p>
             <div className="suggestions">
               {(remoteApi
-                ? ["원유 공급 펌프", "납사 이송 펌프", "열교환기 공급 펌프"]
+                ? [
+                    "대시보드 상황 알려줘",
+                    "펌프1번 현황 보여줘",
+                    "펌프1번 전류 최근 3일 트렌드 보여줘",
+                  ]
                 : [
                     "지금 알람 뭐부터 봐야 해?",
                     "원유 공급 펌프 A 진동 현황 보여줘",
                     "보고서 초안 생성해줘",
                   ]
               ).map((text) => (
-                <button
-                  key={text}
-                  onClick={() => void send(text)}
-                >
+                <button key={text} onClick={() => void send(text)}>
                   <MessageSquare size={14} />
                   <span>{text}</span>
                   <ArrowUpRight size={13} />
@@ -156,13 +185,38 @@ export function ChatPanel({
                   {m.content}
                 </ReactMarkdown>
               </div>
-              {m.links?.map((link) => (
+              {m.id === messages.at(-1)?.id && m.choices?.length ? (
+                <div
+                  className="suggestions"
+                  role="group"
+                  aria-label="조회 대상 선택"
+                >
+                  {m.choices.map((choice) => (
+                    <button
+                      key={choice.message}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => void send(choice.message)}
+                    >
+                      <span>{choice.label}</span>
+                      <ArrowUpRight size={13} />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {m.links?.map((link, index) => (
                 <Link
                   key={link.href}
                   className="chat-screen-link"
                   to={link.href}
                 >
+                  {m.links!.length > 1 ? `${index + 1}. ` : ""}
                   {link.title}
+                  {m.id === lastMessage?.id &&
+                  defaultShortcut?.type === "navigate" &&
+                  m.links!.length === 1 ? (
+                    <kbd>Enter</kbd>
+                  ) : null}
                   <ArrowUpRight size={13} />
                 </Link>
               ))}
@@ -209,7 +263,7 @@ export function ChatPanel({
             maxLength={5000}
             placeholder={
               remoteApi
-                ? "설비 이름이나 별칭을 입력해 보세요…"
+                ? "예: 펌프1번 전류 트렌드 보여줘"
                 : "설비 상태를 질문해 보세요…"
             }
             rows={3}
@@ -218,7 +272,8 @@ export function ChatPanel({
               if (
                 e.key === "Enter" &&
                 !e.shiftKey &&
-                !e.nativeEvent.isComposing
+                !e.nativeEvent.isComposing &&
+                e.nativeEvent.keyCode !== 229
               ) {
                 e.preventDefault();
                 void send();
@@ -226,7 +281,17 @@ export function ChatPanel({
             }}
           />
           <div className="compose-bottom">
-            <span>Enter 전송 · Shift + Enter 줄바꿈</span>
+            <span>
+              {input.trim()
+                ? "Enter 전송 · Shift + Enter 줄바꿈"
+                : defaultShortcut
+                  ? `Enter → ${defaultShortcut.title}`
+                  : lastMessage?.choices?.length
+                    ? "번호 또는 이름 입력 후 Enter로 선택"
+                    : (lastMessage?.links?.length ?? 0) > 1
+                      ? "링크 번호 입력 후 Enter로 이동"
+                      : "Enter 전송 · Shift + Enter 줄바꿈"}
+            </span>
             {pending ? (
               <Button
                 type="button"
@@ -245,7 +310,7 @@ export function ChatPanel({
                 type="submit"
                 size="icon"
                 aria-label="메시지 전송"
-                disabled={!input.trim()}
+                disabled={!input.trim() && !defaultShortcut}
               >
                 <ArrowUp size={17} />
               </Button>
@@ -254,7 +319,7 @@ export function ChatPanel({
         </form>
         <p className="chat-disclaimer">
           {remoteApi
-            ? "현재는 설비 ID 조회를 지원합니다. 모호한 이름은 후보를 보여줍니다."
+            ? "설비·센서·기간을 말하면 조회하거나 해당 화면으로 이동합니다."
             : "데모 답변은 현장 진단을 대체하지 않습니다."}
         </p>
       </div>

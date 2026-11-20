@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useQueries } from "@tanstack/react-query";
 import type {
   Equipment,
@@ -12,16 +13,53 @@ export function EquipmentCards({
   groupName,
   equipment,
   selectedEquipmentId,
+  navigationKey,
+  selectedSensorIds = [],
   onSelect,
 }: {
   groupName: string;
   equipment: Equipment[];
   selectedEquipmentId: string | null;
+  navigationKey?: string;
+  selectedSensorIds?: string[];
   onSelect: (selection: Selection) => void;
 }) {
   const details = useQueries({
     queries: equipment.map((item) => equipmentQuery(item.id)),
   });
+
+  const selectedCard = useRef<HTMLButtonElement | null>(null);
+  const centered = useRef<string | null>(null);
+  const selectedIndex = equipment.findIndex(
+    (item) => item.id === selectedEquipmentId,
+  );
+  const selectedPending =
+    selectedIndex >= 0 && details[selectedIndex].isPending;
+
+  useEffect(() => {
+    const card = selectedCard.current;
+    const container = card?.closest<HTMLElement>(".page-scroll");
+    const key = `${navigationKey ?? ""}:${selectedEquipmentId ?? ""}`;
+    if (!card || !container || selectedPending || centered.current === key)
+      return;
+    const frame = window.requestAnimationFrame(() => {
+      if (!card.isConnected) return;
+      const bounds = card.getBoundingClientRect();
+      const viewport = container.getBoundingClientRect();
+      const top =
+        container.scrollTop + bounds.top - viewport.top - container.clientTop;
+      const inset = Math.max(0, (container.clientHeight - bounds.height) / 2);
+      container.scrollTo({
+        top: Math.max(0, top - inset),
+        behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)")
+          .matches
+          ? "instant"
+          : "smooth",
+      });
+      centered.current = key;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [navigationKey, selectedEquipmentId, selectedPending]);
 
   return (
     <Card className="equipment-cards-panel">
@@ -42,6 +80,7 @@ export function EquipmentCards({
             return (
               <button
                 key={item.id}
+                ref={selected ? selectedCard : undefined}
                 type="button"
                 className={`equipment-summary-card${selected ? " is-selected" : ""}`}
                 data-status={item.equipmentStatus ?? 0}
@@ -77,7 +116,7 @@ export function EquipmentCards({
                 <span className="equipment-sensor-grid">
                   {tags.map((tag) => (
                     <span
-                      className="equipment-sensor-cell"
+                      className={`equipment-sensor-cell${selected && selectedSensorIds.length < tags.length && selectedSensorIds.includes(tag.id) ? " tag-selected" : ""}`}
                       key={tag.id}
                       title={
                         tag.measuredAt

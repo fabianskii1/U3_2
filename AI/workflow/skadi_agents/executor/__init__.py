@@ -15,6 +15,7 @@ from skadi_agents.inspection_evidence import (
     format_inspection_evidence,
     markdown_text,
 )
+from skadi_agents.language import normalize_request
 from skadi_agents.maintenance_report import build_maintenance_draft
 from skadi_agents.reflector import SIGNAL_LABELS, Reflection, normalize, reflect, view_choice
 
@@ -38,6 +39,9 @@ class Toolset:
     get_initial_alarm_report: Callable[[str, object], Awaitable[dict | None]]
     list_incidents: Callable[..., Awaitable[dict]] | None = None
     get_incident: Callable[[str], Awaitable[dict | None]] | None = None
+    get_dashboard: Callable[..., Awaitable[dict]] | None = None
+    get_equipment_readings: Callable[[str], Awaitable[dict]] | None = None
+    equipment_for_sensors: Callable[[list[str]], Awaitable[list[Entity]]] | None = None
 
 
 @dataclass
@@ -47,6 +51,7 @@ class Reply:
     context: dict = field(default_factory=dict)
     navigation_href: str | None = None
     trend_intent: dict | None = None
+    choices: list[dict[str, str]] = field(default_factory=list)
 
 
 def _link(title: str, href: str) -> dict[str, str]:
@@ -764,7 +769,7 @@ async def _incident_reply(
     return Reply(text, links, context)
 
 
-async def run_chat_workflow(
+async def _run_legacy_workflow(
     tools: Toolset,
     message: str,
     screen: dict[str, object],
@@ -974,3 +979,27 @@ async def run_chat_workflow(
             text, links = format_inspection_evidence(entity.name, evidence)
         return Reply(text, links, context)
     return await _show_equipment(tools, entity, request, previous, screen)
+
+
+async def run_chat_workflow(tools: Toolset, message: str, screen: dict, previous: dict) -> Reply:
+    from skadi_agents.workspace import run_workspace
+
+    message = normalize_request(message)
+    reply = await run_workspace(tools, message, screen, previous)
+    if reply is not None:
+        return reply
+    reply = await _run_legacy_workflow(tools, message, screen, previous)
+    if reply.trend_intent:
+        reply.context["workspace"] = {
+            "page": "/trend",
+            "equipment_id": reply.trend_intent.get("equipmentId"),
+            "series": reply.trend_intent["series"],
+        }
+    elif reply.navigation_href and reply.navigation_href.startswith("/equip"):
+        reply.context["workspace"] = {
+            "page": "/equip",
+            "equipment_id": reply.context.get("equipment_id"),
+        }
+    elif "workspace" not in reply.context and previous.get("workspace"):
+        reply.context["workspace"] = previous["workspace"]
+    return reply

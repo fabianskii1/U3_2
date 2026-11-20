@@ -80,8 +80,9 @@ def _narrow(candidates: list[Entity], screen: dict[str, object]) -> list[Entity]
 async def resolve_plant(db: AsyncSession, query: str) -> tuple[str, list[Entity]]:
     """Resolve an exact registered plant ID, name, or alias."""
     result = await lookup_alias(db, query, entity_type="plant")
-    matches = [Entity("plant", row["id"], row["name"], row["plant_id"])
-               for row in result["candidates"]]
+    matches = [
+        Entity("plant", row["id"], row["name"], row["plant_id"]) for row in result["candidates"]
+    ]
     return result["status"], matches
 
 
@@ -122,6 +123,15 @@ async def resolve_entity(
     assets = await all_rows(
         db, select(equipment.equipment).order_by(equipment.equipment.c.equipment_id)
     )
+    numbered = re.fullmatch(r"펌프0*(\d+)(?:번|호)?|0*(\d+)(?:번|호)펌프", key)
+    if numbered:
+        code = f"P{int(numbered[1] or numbered[2])}"
+        candidates = [
+            row for row in assets if row["equipment_id"] == code and row["equipment_type"] == "펌프"
+        ]
+        if candidates:
+            return "found", [_equipment_entity(candidates[0])]
+        return "not_found", []
     by_id = {row["equipment_id"]: _equipment_entity(row) for row in assets}
     aliases = await all_rows(db, select(equipment.equipment_alias))
     found = []
@@ -130,8 +140,13 @@ async def resolve_entity(
         result = await lookup_alias(db, query, entity_type=kind)
         found.extend(result["candidates"])
     matches = [
-        Entity("unit" if row["entity_type"] == "equipment_group" else row["entity_type"],
-               row["id"], row["name"], row["plant_id"], row["equipment_group_id"])
+        Entity(
+            "unit" if row["entity_type"] == "equipment_group" else row["entity_type"],
+            row["id"],
+            row["name"],
+            row["plant_id"],
+            row["equipment_group_id"],
+        )
         for row in found
     ]
     numbered_units = []
@@ -163,8 +178,11 @@ async def resolve_entity(
         if alias["equipment_id"] in aliases_by_equipment:
             aliases_by_equipment[alias["equipment_id"]].append(alias["equipment_alias_name"])
     catalog = [
-        {"equipment_id": row["equipment_id"], "equipment_name": row["equipment_name"],
-         "aliases": aliases_by_equipment[row["equipment_id"]]}
+        {
+            "equipment_id": row["equipment_id"],
+            "equipment_name": row["equipment_name"],
+            "aliases": aliases_by_equipment[row["equipment_id"]],
+        }
         for row in assets
     ]
     result = await lookup_equipment(query, catalog)
@@ -202,6 +220,18 @@ async def equipment_of_type(db: AsyncSession, equipment_type: str) -> list[Entit
         db,
         select(equipment.equipment)
         .where(equipment.equipment.c.equipment_type == equipment_type)
+        .order_by(equipment.equipment.c.equipment_id),
+    )
+    return [_equipment_entity(row) for row in rows]
+
+
+async def equipment_for_sensors(db: AsyncSession, sensor_ids: list[str]) -> list[Entity]:
+    rows = await all_rows(
+        db,
+        select(equipment.equipment)
+        .join(equipment.sensor)
+        .where(equipment.sensor.c.sensor_id.in_(sensor_ids))
+        .distinct()
         .order_by(equipment.equipment.c.equipment_id),
     )
     return [_equipment_entity(row) for row in rows]

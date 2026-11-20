@@ -1,3 +1,4 @@
+import { RemoteDashboard } from "./RemoteDashboard.tsx";
 import { Link } from "react-router";
 import {
   Activity,
@@ -22,6 +23,17 @@ import { alarmLabel, alarmFilterValue } from "../../shared/lib/alarm-level.ts";
 import { remoteApi } from "../../shared/api/be-adapter.ts";
 import { IncidentPanel } from "../../features/incidents/index.ts";
 export function DashboardPage({
+  hierarchy,
+  alarms,
+}: {
+  hierarchy: Hierarchy;
+  alarms: Alarm[];
+}) {
+  if (remoteApi) return <RemoteDashboard hierarchy={hierarchy} />;
+  return <MockDashboard hierarchy={hierarchy} alarms={alarms} />;
+}
+
+function MockDashboard({
   hierarchy,
   alarms,
 }: {

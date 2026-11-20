@@ -14,6 +14,7 @@ from app.modules.alarms.priorities import get_alarm_priorities
 from app.modules.chat.aliases import lookup_alias
 from app.modules.chat.assets import (
     LookupEquipment,
+    equipment_for_sensors,
     equipment_of_type,
     get_equipment_sensors,
     list_plant_units,
@@ -22,6 +23,8 @@ from app.modules.chat.assets import (
     resolve_plant,
 )
 from app.modules.chat.evidence import get_inspection_evidence
+from app.modules.chat.workspace_data import get_dashboard
+from app.modules.equipment.router import equipment_detail
 from app.modules.incidents.service import get_incident, list_incidents
 
 
@@ -70,6 +73,7 @@ async def run_chat_workflow(
         list_plant_units=partial(list_plant_units, db),
         load_equipment=partial(load_equipment, db),
         equipment_of_type=partial(equipment_of_type, db),
+        equipment_for_sensors=partial(equipment_for_sensors, db),
         get_equipment_sensors=partial(get_equipment_sensors, db),
         get_alarm_priorities=partial(get_alarm_priorities, db),
         get_alarm=partial(_saved_alarm, db),
@@ -77,5 +81,7 @@ async def run_chat_workflow(
         get_inspection_evidence=partial(get_inspection_evidence, db),
         list_incidents=partial(list_incidents, db),
         get_incident=partial(get_incident, db),
+        get_dashboard=partial(get_dashboard, db=db),
+        get_equipment_readings=partial(equipment_detail, db=db),
     )
     return await execute_workflow(tools, message, screen, previous)
