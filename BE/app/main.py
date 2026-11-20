@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.database import get_session
 from app.modules.alarms.router import router as alarms_router
 from app.modules.chat.router import router as chat_router
+from app.modules.chat.workspace_data import router as dashboard_router
 from app.modules.equipment.router import router as equipment_router
 from app.modules.hierarchy.router import router as hierarchy_router
 from app.modules.histories.router import router as histories_router
@@ -27,6 +28,7 @@ app = FastAPI(
     title="SKADI BE",
     version="0.1.0",
     openapi_tags=[
+        {"name": "대시보드", "description": "설비 상태·활성 알람·대응 우선순위 요약"},
         {"name": "계층", "description": "Plant·Unit·설비 계층 조회"},
         {"name": "설비", "description": "설비 상세와 센서 조회"},
         {"name": "시계열", "description": "센서 트렌드 조회"},
@@ -57,6 +59,7 @@ for domain_router in (
     trend_views_router,
     manuals_router,
     chat_router,
+    dashboard_router,
 ):
     app.include_router(domain_router)
 

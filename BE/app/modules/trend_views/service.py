@@ -1,6 +1,7 @@
 """Validate and persist immutable trend view definitions."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -38,6 +39,7 @@ class TrendViewCreate(BaseModel):
     series: list[TrendSeries] = Field(min_length=1, max_length=MAX_SERIES)
     showAnomalies: bool = False
     messageId: int | None = None
+    interval: Literal["1m", "1h", "1d"] | None = None
 
 
 async def create_trend_view(db: AsyncSession, payload: TrendViewCreate) -> tuple[UUID, str]:
@@ -109,6 +111,7 @@ async def create_trend_view(db: AsyncSession, payload: TrendViewCreate) -> tuple
             for item in payload.series
         ],
         "showAnomalies": payload.showAnomalies,
+        "interval": payload.interval,
     }
     view_id = (
         await db.execute(

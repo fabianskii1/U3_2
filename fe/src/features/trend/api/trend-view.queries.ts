@@ -17,6 +17,7 @@ export const savedTrendSchema = z.object({
     version: z.number().int().positive(),
     series: z.array(seriesSchema).min(1),
     showAnomalies: z.boolean(),
+    interval: z.enum(["1m", "1h", "1d"]).nullable().optional(),
   }),
   createdAt: z.string(),
   expiresAt: z.string().nullable(),

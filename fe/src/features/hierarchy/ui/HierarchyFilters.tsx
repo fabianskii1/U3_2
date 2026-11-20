@@ -18,11 +18,17 @@ export function HierarchyFilters({
     (item) => item.unitId === selection.unitId,
   );
   const sensors =
-    data.equipment
-      .find((item) => item.id === selection.equipmentId)
-      ?.tags.filter(
-        (tag) => !availableSensorIds || availableSensorIds.includes(tag.id),
-      ) ?? [];
+    (availableSensorIds && !selection.equipmentId
+      ? data.equipment.flatMap((asset) =>
+          asset.tags
+            .filter((tag) => availableSensorIds.includes(tag.id))
+            .map((tag) => ({ ...tag, name: `${asset.id} · ${tag.name}` })),
+        )
+      : data.equipment
+          .find((item) => item.id === selection.equipmentId)
+          ?.tags.filter(
+            (tag) => !availableSensorIds || availableSensorIds.includes(tag.id),
+          )) ?? [];
 
   return (
     <div className="hierarchy-filters" role="group" aria-label="설비 계층 선택">

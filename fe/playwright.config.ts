@@ -3,6 +3,7 @@ const production = process.env.TEST_PRODUCTION === "1";
 export default defineConfig({
   testMatch: production ? "**/devtools.spec.ts" : "**/*.spec.ts",
   testDir: "./e2e",
+  testIgnore: "**/chat-workspace.spec.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 30000,

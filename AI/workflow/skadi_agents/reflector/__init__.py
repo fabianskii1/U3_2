@@ -5,6 +5,8 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Literal
 
+from skadi_agents.language import normalize_request
+
 Intent = Literal[
     "alias_lookup",
     "equipment_lookup",
@@ -44,8 +46,8 @@ STATUS_END = re.compile(
     rf"상태|데이터|정보|화면|{TREND_TERMS})(?:를|을)?$"
 )
 SENSOR_PHRASE = re.compile(
-    r"(?P<name>(?:베어링\s*|축\s*|모터\s*)?진동(?:\s*속도\s*RMS)?|"
-    r"(?:베어링\s*|유체\s*|모터\s*)?온도|흡입압력?|토출압력?|압력|(?:모터\s*)?전류|전압|회전수)"
+    r"(?P<name>(?:베어링\s*|축\s*|모터\s*)?진동(?:\s*속도(?:\s*RMS)?)?|"
+    r"(?:베어링\s*|유체\s*|모터\s*)?온도|흡입(?:\s*압력?)?(?:\s*(?:측|쪽))?|토출(?:\s*압력?)?(?:\s*(?:측|쪽))?|압력|(?:모터\s*)?전류|(?:모터\s*)?(?:선간\s*)?전압|회전수|선간|베어링|유체|회전|속도)"
     r"(?:만|을|를)?$",
     re.IGNORECASE,
 )
@@ -133,7 +135,7 @@ def normalize(value: str) -> str:
 
 
 def view_choice(message: str) -> ViewIntent | None:
-    text = re.sub(r"[?!.。\s]+$", "", unicodedata.normalize("NFKC", message).strip())
+    text = re.sub(r"[?!.。\s]+$", "", normalize_request(message).strip())
     key = normalize(REQUEST_END.sub("", text))
     if key in {"설비현황", "현황", "현재값", "측정값"}:
         return "equipment_status"
@@ -158,7 +160,7 @@ def _extract_sensor(text: str) -> tuple[str, str | None, str | None]:
 
 def reflect(message: str) -> Reflection:
     """Extract only the requested intent and user-supplied phrases."""
-    text = re.sub(r"[?!.。\s]+$", "", unicodedata.normalize("NFKC", message).strip())
+    text = re.sub(r"[?!.。\s]+$", "", normalize_request(message).strip())
     compact = normalize(text)
     selection = re.fullmatch(r"(\d{1,3})(?:번|번째)(?:으로|로|요)?", compact)
     if selection or compact in {"첫번째", "첫번째요", "두번째", "두번째요", "세번째", "세번째요"}:

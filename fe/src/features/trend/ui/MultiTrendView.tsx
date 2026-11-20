@@ -68,6 +68,9 @@ export function MultiTrendView({
       )}
       {limited.map((item, index) => {
         const tag = tags.get(item.sensorId);
+        const asset = hierarchy.equipment.find((e) =>
+          e.tags.some((t) => t.id === item.sensorId),
+        );
         const query = queries[index];
         const invalid =
           Date.parse(item.start) >= Date.parse(item.end) ||
@@ -75,7 +78,7 @@ export function MultiTrendView({
         return (
           <Card key={`${item.sensorId}-${item.start}-${item.end}-${index}`}>
             <CardHeader
-              title={`${tag?.name ?? item.sensorId} · ${item.sensorId}`}
+              title={`${asset?.id ?? ""} ${asset?.name ?? ""} · ${tag?.name ?? item.sensorId} · ${item.sensorId}`}
               description={`${item.start} ~ ${item.end} · ${intervalLabel(intervals[index])} 간격 · ${tag?.unit ?? ""}`}
             />
             {invalid ? (

@@ -15,7 +15,10 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       strictPort: true,
-      proxy: env.VITE_API_MODE === "remote" ? { "/api": "http://127.0.0.1:8000" } : undefined,
+      proxy:
+        env.VITE_API_MODE === "remote"
+          ? { "/api": env.VITE_BE_PROXY_TARGET || "http://127.0.0.1:8000" }
+          : undefined,
     },
     preview: { port: 4173 },
     build: { chunkSizeWarningLimit: 750 },

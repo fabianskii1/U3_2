@@ -1,5 +1,6 @@
 """SA-01 equipment identity, sensor matching, and navigation links."""
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 from urllib.parse import urlencode
@@ -39,7 +40,25 @@ class Entity:
 
 
 def matching_sensors(rows: list[dict], query: str, signal: str | None) -> list[dict]:
-    key = normalize(query)
+    key = re.sub(r"(?:센서|측|쪽)$", "", normalize(query))
+    if not key:
+        return []
+    generic = {
+        "진동": "vibration",
+        "온도": "temperature",
+        "압력": "pressure",
+        "전류": "current",
+        "모터전류": "current",
+        "전압": "voltage",
+        "모터전압": "voltage",
+        "회전수": "speed",
+    }
+    if key in generic:
+        return [row for row in rows if sensor_signal(row["measurement_name"]) == generic[key]]
+    if key == "속도":
+        return [
+            row for row in rows if sensor_signal(row["measurement_name"]) in {"speed", "vibration"}
+        ]
     exact = [
         row
         for row in rows
@@ -51,7 +70,7 @@ def matching_sensors(rows: list[dict], query: str, signal: str | None) -> list[d
     ]
     if exact:
         return exact
-    if signal is None:
+    if len(key) < 2:
         return []
     candidates = [
         row

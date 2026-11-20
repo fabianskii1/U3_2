@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { useLocation } from "react-router";
 import type { Hierarchy, Selection } from "../../features/hierarchy/index.ts";
 import type { Alarm } from "../../features/alarms/index.ts";
 import { CDUProcessLayout } from "../../features/equipment/ui/CDUProcessLayout.tsx";
@@ -39,10 +40,13 @@ export function EquipmentPage({
   const [faultSelection, setFaultSelection] = useState<FaultSelection | null>(
     null,
   );
+  const location = useLocation();
   const unit = hierarchy.units.find((u) => u.id === selection.unitId);
   const equipment = unit
     ? hierarchy.equipment.filter((item) => item.unitId === unit.id)
-    : [];
+    : hierarchy.equipment.filter(
+        (item) => !selection.plantId || item.plantId === selection.plantId,
+      );
   const selectedEquipment = hierarchy.equipment.find(
     (item) => item.id === selection.equipmentId,
   );
@@ -77,11 +81,12 @@ export function EquipmentPage({
       )}
       {unit && (
         <EquipmentCards
-          groupName={unit.name}
+          groupName={unit?.name ?? "전체 설비"}
           equipment={equipment}
           alarms={alarms}
           replayHour={activeReplayHour}
           selectedEquipmentId={selection.equipmentId}
+          navigationKey={location.key}
           onSelect={onSelect}
         />
       )}

@@ -11,6 +11,7 @@ import {
 } from "../../features/trend/index.ts";
 import { Card, CardHeader } from "../../shared/ui/card.tsx";
 import { Button } from "../../shared/ui/button.tsx";
+import { comparisonSensors } from "../../features/trend/model/comparison-sensors.ts";
 import { PumpComparisonChart } from "../../features/trend/ui/PumpComparisonChart.tsx";
 import { MultiTrendView } from "../../features/trend/ui/MultiTrendView.tsx";
 import { savedTrendQuery } from "../../features/trend/api/trend-view.queries.ts";
@@ -94,7 +95,9 @@ function SavedTrendPage({
     params.get("view_from") ?? savedFrom,
     params.get("view_to") ?? savedTo,
   );
-  const requestedMode = intervalMode(params.get("interval"));
+  const requestedMode = intervalMode(
+    params.get("interval") ?? query.data.config.interval ?? null,
+  );
   const mode = remoteApi && requestedMode === "1s" ? "auto" : requestedMode;
   const selectedSeries = originalSeries
     .filter((item) => selection.sensorIds.includes(item.sensorId))
@@ -409,11 +412,44 @@ function LegacyTrendPage({
       )}
       {!eq ? (
         selectedGroup && selection.plantId ? (
-          <PumpComparisonChart
-            hierarchy={hierarchy}
-            plantId={selection.plantId}
-            unitId={selectedGroup.id}
-          />
+          params.get("compare") === "all" ? (
+            !valid || tooManyPoints ? (
+              <ErrorState message="비교할 조회 기간과 간격을 확인해 주세요." />
+            ) : (
+              <>
+                <MultiTrendFilters
+                  params={params}
+                  setParams={setParams}
+                  bounds={bounds}
+                  mode={mode}
+                />
+                <PumpComparisonChart
+                  hierarchy={hierarchy}
+                  plantId={selection.plantId}
+                  unitId={selectedGroup.id}
+                  selectedKind={
+                    comparisonSensors.find(
+                      (kind) => kind.id === params.get("compare_sensor"),
+                    )?.id ?? "VIB"
+                  }
+                  onKindChange={(kind) => {
+                    const next = new URLSearchParams(params);
+                    next.set("compare_sensor", kind);
+                    setParams(next);
+                  }}
+                  windowRange={{ from: bounds.from, to: bounds.to }}
+                  interval={interval}
+                  equipmentIds={params.getAll("compare_equipment_id")}
+                />
+              </>
+            )
+          ) : (
+            <PumpComparisonChart
+              hierarchy={hierarchy}
+              plantId={selection.plantId}
+              unitId={selectedGroup.id}
+            />
+          )
         ) : (
           <Card>
             <EmptyState

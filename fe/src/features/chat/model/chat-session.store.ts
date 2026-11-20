@@ -7,6 +7,7 @@ export type Message = {
   role: "user" | "assistant";
   content: string;
   links?: { title: string; href: string }[];
+  choices?: { label: string; message: string }[];
 };
 export const useChatStore = create<{
   sessionId: string;
@@ -36,7 +37,10 @@ export const useChatStore = create<{
             messages: [],
           }),
       }),
-      { name: remoteApi ? "skadi-chat-remote-v1" : "skadi-chat-v1", version: 1 },
+      {
+        name: remoteApi ? "skadi-chat-remote-v1" : "skadi-chat-v1",
+        version: 1,
+      },
     ),
     {
       ...devtoolsOptions("Chat Session"),

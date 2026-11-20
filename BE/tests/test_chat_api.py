@@ -229,7 +229,8 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                         f"{number}번 펌프 진동 현황 보여줘"
                     )
                 unit_sensor = await send("진동 추이", equipment_group_id="CDU-01")
-                assert "펌프를 선택해 주세요" in unit_sensor and unit_href in unit_sensor
+                assert "펌프를 선택해 주세요" in unit_sensor
+                assert len(event_data(unit_sensor, "choice")) == 7
                 assert not event_data(unit_sensor, "navigate")
                 await db.execute(
                     insert(models.sensor).values(
@@ -239,7 +240,7 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                         unit="m/s²",
                     )
                 )
-                rms = await send("진동 현황", equipment_id="P3")
+                rms = await send("P3 진동 현황", equipment_id="P3")
                 assert "진동 속도 RMS 현황 열기" in rms
                 assert "/equip?equip_id=P3&sensor_id=10-VT-1305" in rms
                 assert "TEST-VIB-ACC" not in rms
@@ -278,14 +279,12 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                     await assert_trend(trend_link["href"], "10-VT-1205", days, equipment_id="P2")
                     assert event_data(trend, "navigate") == [{"href": trend_link["href"]}]
 
-                current_href = "/equip?equip_id=P3&sensor_id=10-IT-1304"
+                current_href = "/equip?equip_id=P3"
                 current = await send("3번 펌프 전류", equipment_id="P2")
-                assert "모터 전류** 데이터를 볼까요?" in current
-                assert not event_data(current, "navigate")
-                status_choice, trend_choice = event_data(current, "citation")
-                assert status_choice == {"title": "설비 현황 열기", "href": current_href}
-                await assert_trend(trend_choice["href"], "10-IT-1304")
-                status = await send("설비 현황", equipment_id="P2")
+                (trend_choice,) = event_data(current, "citation")
+                await assert_trend(trend_choice["href"], "10-IT-1304", days=14)
+                assert event_data(current, "navigate") == [{"href": trend_choice["href"]}]
+                status = await send("설비 현황")
                 assert event_data(status, "navigate") == [{"href": current_href}]
                 assert (event_data(status, "citation")[0]["href"]) == current_href
 

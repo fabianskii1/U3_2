@@ -44,6 +44,9 @@ export const sendChat = async (
       equipment_group_id: context.unitId ?? null,
       equipment_id: context.equipmentId,
       sensor_id: context.sensorId ?? null,
+      sensor_ids: context.sensorIds ?? [],
+      trend_series: context.trendSeries ?? [],
+      alarm_id: context.alarmId ?? null,
       sensor_interval: context.sensor_interval ?? null,
       sensor_start_time: context.from ?? null,
       sensor_end_time: context.to ?? null,
@@ -76,11 +79,16 @@ export const sendChat = async (
   });
   if (!response.ok) {
     const error = await response.json().catch(() => null);
-    throw new Error(error?.message ?? error?.detail?.message ?? `채팅 요청 실패 (${response.status})`);
+    throw new Error(
+      error?.message ??
+        error?.detail?.message ??
+        `채팅 요청 실패 (${response.status})`,
+    );
   }
   if (!response.body) throw new Error("채팅 스트림을 열 수 없습니다.");
   let message = "";
   const links: { title: string; href: string }[] = [];
+  const choices: { label: string; message: string }[] = [];
   let action: ChatResponse["action"];
   let done = false;
   let buffer = "";
@@ -117,6 +125,14 @@ export const sendChat = async (
             title: String(value.title ?? "근거"),
             href: value.href,
           });
+        if (
+          type === "choice" &&
+          typeof value.label === "string" &&
+          typeof value.message === "string"
+        )
+          choices.push({ label: value.label, message: value.message });
+        if (type === "navigate" && typeof value.href === "string")
+          action = { type: "navigate", href: value.href };
         if (type === "report.patch") {
           const draft = Object.values(
             useReportDraftStore.getState().drafts,
@@ -147,5 +163,5 @@ export const sendChat = async (
   }
   if (!done)
     throw new Error("채팅 응답이 완료되기 전에 연결이 종료되었습니다.");
-  return chatResponseSchema.parse({ message, links, action });
+  return chatResponseSchema.parse({ message, links, choices, action });
 };
