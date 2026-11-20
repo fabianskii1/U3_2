@@ -175,7 +175,7 @@ export function App() {
                 <Equipment
                   hierarchy={data}
                   selection={selection}
-                  alarms={remoteApi ? [] : (alarms.data?.alarms ?? [])}
+                  alarms={alarms.data?.alarms ?? []}
                   onSelect={onSelect}
                 />
               }

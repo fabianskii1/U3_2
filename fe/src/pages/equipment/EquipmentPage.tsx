@@ -1,9 +1,18 @@
+import { lazy, Suspense } from "react";
 import type { Hierarchy, Selection } from "../../features/hierarchy/index.ts";
 import type { Alarm } from "../../features/alarms/index.ts";
 import { CDUProcessLayout } from "../../features/equipment/ui/CDUProcessLayout.tsx";
 import { EquipmentCards } from "../../features/equipment/ui/EquipmentCards.tsx";
+import { EquipmentFeed } from "../../features/equipment/ui/EquipmentFeed.tsx";
 import { Card } from "../../shared/ui/card.tsx";
 import { IncidentPanel } from "../../features/incidents/index.ts";
+import { remoteApi } from "../../shared/api/be-adapter.ts";
+
+const Pump3D = lazy(() =>
+  import("../../features/equipment/ui/Pump3D.tsx").then((module) => ({
+    default: module.Pump3D,
+  })),
+);
 
 export function EquipmentPage({
   hierarchy,
@@ -20,13 +29,16 @@ export function EquipmentPage({
   const equipment = unit
     ? hierarchy.equipment.filter((item) => item.unitId === unit.id)
     : [];
+  const selectedEquipment = hierarchy.equipment.find(
+    (item) => item.id === selection.equipmentId,
+  );
   return (
     <div className="page">
       {unit?.processType === "CDU" ? (
         <CDUProcessLayout
           hierarchy={hierarchy}
           selection={selection}
-          alarms={alarms}
+          alarms={remoteApi ? [] : alarms}
           onSelect={onSelect}
         />
       ) : unit ? (
@@ -35,12 +47,32 @@ export function EquipmentPage({
         </Card>
       ) : null}
       {unit && (
+        <EquipmentFeed
+          equipment={equipment}
+          alarms={alarms}
+          onSelect={onSelect}
+        />
+      )}
+      {unit && (
         <EquipmentCards
           groupName={unit.name}
           equipment={equipment}
           selectedEquipmentId={selection.equipmentId}
           onSelect={onSelect}
         />
+      )}
+      {selectedEquipment && (
+        <Suspense
+          fallback={
+            <Card className="pump-3d-panel">3D 모델을 불러오는 중입니다.</Card>
+          }
+        >
+          <Pump3D
+            key={selectedEquipment.id}
+            equipment={selectedEquipment}
+            alarms={remoteApi ? [] : alarms}
+          />
+        </Suspense>
       )}
       {selection.equipmentId && (
         <IncidentPanel

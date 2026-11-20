@@ -9,9 +9,19 @@ import type {
 } from "../../shared/api/contracts/hierarchy.ts";
 import { EquipmentPage } from "./EquipmentPage.tsx";
 
+vi.mock("../../features/equipment/ui/Pump3D.tsx", () => ({
+  Pump3D: ({ equipment }: { equipment: { id: string } }) => (
+    <div data-testid="pump-3d">{equipment.id} 3D 부품</div>
+  ),
+}));
+
 afterEach(cleanup);
 
-function renderPage(processType: string | null, unitId: string | null) {
+function renderPage(
+  processType: string | null,
+  unitId: string | null,
+  equipmentId: string | null = null,
+) {
   const hierarchy: Hierarchy = {
     ...demoHierarchy,
     units: demoHierarchy.units.map((unit) => ({ ...unit, processType })),
@@ -19,7 +29,7 @@ function renderPage(processType: string | null, unitId: string | null) {
   const selection: Selection = {
     plantId: "P-01",
     unitId,
-    equipmentId: null,
+    equipmentId,
     sensorIds: [],
   };
   render(
@@ -55,5 +65,12 @@ describe("EquipmentPage process layout", () => {
   it("does not show a process layout before a group is selected", () => {
     renderPage("CDU", null);
     expect(screen.queryByText("공정 배치도")).not.toBeInTheDocument();
+  });
+
+  it("shows the 3D component after equipment is selected", async () => {
+    renderPage("CDU", "P-01-P1", "P-1101A");
+    expect(await screen.findByTestId("pump-3d")).toHaveTextContent(
+      "P-1101A 3D 부품",
+    );
   });
 });
