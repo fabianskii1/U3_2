@@ -22,6 +22,15 @@ import {
   flushReport,
   type Report,
 } from "../../features/reports/index.ts";
+import {
+  incidentQuery,
+  incidentDraftQuery,
+} from "../../features/incidents/api/incidents.queries.ts";
+import { incidentReportFields } from "../../features/reports/model/incident-report.ts";
+import {
+  incidentOperatingQuery,
+  incidentReferenceTime,
+} from "../../features/reports/api/incident-operating.api.ts";
 import { alarmsQuery } from "../../features/alarms/index.ts";
 import { Button } from "../../shared/ui/button.tsx";
 import { Badge } from "../../shared/ui/badge.tsx";
@@ -44,7 +53,110 @@ import {
 import type { MaintenanceReport } from "../../shared/api/contracts/maintenance-report.ts";
 import "../../features/reports/ui/maintenance-report.css";
 
-export function NewReportPage({
+export function NewReportPage(props: {
+  hierarchy: Hierarchy;
+  selection: Selection;
+}) {
+  const [params] = useSearchParams();
+  const incidentId = params.get("incident_id");
+  return incidentId ? (
+    <NewIncidentReportPage
+      hierarchy={props.hierarchy}
+      incidentId={incidentId}
+    />
+  ) : (
+    <NewEquipmentReportPage {...props} />
+  );
+}
+
+function NewIncidentReportPage({
+  hierarchy,
+  incidentId,
+}: {
+  hierarchy: Hierarchy;
+  incidentId: string;
+}) {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const started = useRef(false);
+  const [creationError, setCreationError] = useState("");
+  const incident = useQuery(
+    incidentQuery(incidentId, params.get("as_of") ?? undefined),
+  );
+  const draft = useQuery(incidentDraftQuery(incidentId));
+  const equipment = hierarchy.equipment.find(
+    (asset) => asset.id === incident.data?.equipment_id,
+  );
+  const references = useQuery(
+    reportReferencesQuery(
+      equipment?.id ?? "",
+      incident.data ? incidentReferenceTime(incident.data) : undefined,
+    ),
+  );
+  const operating = useQuery(incidentOperatingQuery(incident.data, equipment));
+  useEffect(() => {
+    if (
+      started.current ||
+      !incident.data ||
+      !draft.data ||
+      !equipment ||
+      operating.isPending ||
+      (remoteApi && references.isPending)
+    )
+      return;
+    try {
+      const { maintenance, ...values } = incidentReportFields(
+        incident.data,
+        draft.data,
+        equipment,
+        references.data,
+        operating.data,
+      );
+      started.current = true;
+      const store = useReportDraftStore.getState();
+      const id = store.createDraft(equipment.id, values);
+      store.initializeMaintenance(id, maintenance);
+      void navigate(
+        `/reports/${id}?edit=1&equip_id=${encodeURIComponent(equipment.id)}`,
+        { replace: true },
+      );
+    } catch (error) {
+      setCreationError(errorMessage(error));
+    }
+  }, [
+    incident.data,
+    draft.data,
+    equipment,
+    references.isPending,
+    references.data,
+    operating.isPending,
+    operating.data,
+    navigate,
+  ]);
+  const error = incident.error ?? draft.error;
+  if (error || creationError)
+    return (
+      <div className="page">
+        <ErrorState
+          message={creationError || errorMessage(error)}
+          retry={() => {
+            void incident.refetch();
+            void draft.refetch();
+          }}
+        />
+        <Button asChild variant="outline">
+          <Link to={`/incidents/${encodeURIComponent(incidentId)}`}>
+            사건 상세로 돌아가기
+          </Link>
+        </Button>
+      </div>
+    );
+  if (incident.data && !equipment)
+    return <ErrorState message="사건에 연결된 설비를 찾지 못했습니다." />;
+  return <LoadingState />;
+}
+
+function NewEquipmentReportPage({
   hierarchy,
   selection,
 }: {
@@ -142,24 +254,22 @@ export function ReportEditorPage({ hierarchy }: { hierarchy: Hierarchy }) {
     const equipment = hierarchy.equipment.find(
       (e) => e.id === local.equipmentId,
     );
-    useReportDraftStore
-      .getState()
-      .initializeMaintenance(
-        reportId,
-        applyReportReferences(
-          createMaintenance(
-            {
-              id: local.id,
-              equipmentId: local.equipmentId,
-              values: local.values,
-              version: local.serverVersion,
-              updatedAt: local.updatedAt,
-            },
-            equipment,
-          ),
-          references.data,
+    useReportDraftStore.getState().initializeMaintenance(
+      reportId,
+      applyReportReferences(
+        createMaintenance(
+          {
+            id: local.id,
+            equipmentId: local.equipmentId,
+            values: local.values,
+            version: local.serverVersion,
+            updatedAt: local.updatedAt,
+          },
+          equipment,
         ),
-      );
+        references.data,
+      ),
+    );
   }, [local, reportId, hierarchy, references.isPending, references.data]);
   if (local?.values.maintenance)
     return <EditorContent key={reportId} id={reportId} hierarchy={hierarchy} />;
@@ -224,16 +334,14 @@ function EditorContent({
   const change = (model: MaintenanceReport) => {
     if (!editing || saving || m.status === "confirmed") return;
     setErrors([]);
-    useReportDraftStore
-      .getState()
-      .patch(id, {
-        maintenance: model,
-        symptom: model.observations.symptoms,
-        cause: model.diagnosis.final.confirmedAt
-          ? finalCause(model)
-          : d.values.cause,
-        action: model.work.description,
-      });
+    useReportDraftStore.getState().patch(id, {
+      maintenance: model,
+      symptom: model.observations.symptoms,
+      cause: model.diagnosis.final.confirmedAt
+        ? finalCause(model)
+        : d.values.cause,
+      action: model.work.description,
+    });
   };
   const save = async (confirm = false) => {
     const current =
@@ -248,16 +356,14 @@ function EditorContent({
     }
     try {
       if (confirm)
-        useReportDraftStore
-          .getState()
-          .patch(id, {
-            maintenance: {
-              ...current,
-              status: "confirmed",
-              confirmedAt: new Date().toISOString(),
-            },
-            cause: finalCause(current),
-          });
+        useReportDraftStore.getState().patch(id, {
+          maintenance: {
+            ...current,
+            status: "confirmed",
+            confirmedAt: new Date().toISOString(),
+          },
+          cause: finalCause(current),
+        });
       localStorage.setItem("skadi-storage-check", "ok");
       localStorage.removeItem("skadi-storage-check");
       await flushReport(id, client);
@@ -410,8 +516,24 @@ function EditorContent({
       {m.original.kind !== "example" && (
         <div className="mr-connection-note">
           <FileText size={14} />
-          등록 알람·설비·매뉴얼은 연결 가능한 데이터를 사용합니다. AI 원인
-          후보와 매뉴얼 권장 조치 본문은 아직 연결되지 않았습니다.
+          {m.original.incident ? (
+            <div>
+              <strong>
+                사건 {m.original.incident.incident_id}에서 가져온 보고서
+              </strong>
+              <p>{d.values.risk}</p>
+              <Link
+                to={`/incidents/${encodeURIComponent(m.original.incident.incident_id)}`}
+              >
+                원본 사건 보기
+              </Link>
+            </div>
+          ) : (
+            <>
+              등록 알람·설비·매뉴얼은 연결 가능한 데이터를 사용합니다. AI 원인
+              후보와 매뉴얼 권장 조치 본문은 아직 연결되지 않았습니다.
+            </>
+          )}
         </div>
       )}
       {!!m.original.referenceNotes?.length && (

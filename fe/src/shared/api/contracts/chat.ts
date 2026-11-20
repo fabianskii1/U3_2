@@ -5,6 +5,12 @@ export const chatRequestSchema = z.object({
   sessionId: z.string(),
   screenContext: z.object({
     page: z.string(),
+    query: z.string().optional(),
+    section: z.string().optional(),
+    incidentId: z.string().optional(),
+    asOf: z.string().optional(),
+    replayHour: z.number().nullable().optional(),
+    replayMax: z.number().optional(),
     plantId: z.string().nullable().optional(),
     unitId: z.string().nullable().optional(),
     equipmentId: z.string().nullable(),

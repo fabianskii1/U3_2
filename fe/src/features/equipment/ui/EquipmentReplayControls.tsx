@@ -31,7 +31,7 @@ export function EquipmentReplayControls({
   );
   const selected = hour ?? liveHour;
   return (
-    <Card className="equipment-replay">
+    <Card className="equipment-replay" data-chat-section="replay">
       <div className="equipment-replay-header">
         <div>
           <strong>설비 상태 기록 재생</strong>

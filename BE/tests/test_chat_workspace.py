@@ -251,13 +251,13 @@ async def test_workspace_api_persists_comparison_and_matches_dashboard(monkeypat
                 assert "navigate" not in summary
                 selection_request = str(uuid4())
                 selection = await send(
-                    "진동 최근 3일 트렌드 보여줘",
+                    "다른 펌프 진동 최근 3일 트렌드 보여줘",
                     {"page": "/equip", "equipment_id": "P4"},
                     request_id=selection_request,
                 )
                 assert len(selection["choice"]) == 7 and "navigate" not in selection
                 replayed_selection = await send(
-                    "진동 최근 3일 트렌드 보여줘", request_id=selection_request
+                    "다른 펌프 진동 최근 3일 트렌드 보여줘", request_id=selection_request
                 )
                 assert replayed_selection["choice"] == selection["choice"]
                 selected = await send("2번")
@@ -304,8 +304,8 @@ async def test_workspace_api_persists_comparison_and_matches_dashboard(monkeypat
     "sensor", ["전류", "전압", "진동", "회전수", "흡입압", "토출압", "유체 온도", "베어링 온도"]
 )
 @pytest.mark.parametrize("mode", ["트렌드 보여줘", "현황 보여줘", "얼마야?"])
-async def test_unspecified_equipment_asks_even_when_screen_and_history_have_p4(tools, sensor, mode):
-    previous = {"equipment_id": "P4", "workspace": {"page": "/trend", "equipment_id": "P4"}}
+async def test_short_sensor_request_retains_current_screen_scope(tools, sensor, mode):
+    previous = {"equipment_id": "P1", "workspace": {"page": "/trend", "equipment_id": "P1"}}
     screen = {
         "page": "/equip",
         "plant_id": "PLANT-01",
@@ -313,17 +313,14 @@ async def test_unspecified_equipment_asks_even_when_screen_and_history_have_p4(t
         "equipment_id": "P4",
     }
     reply = await run_chat_workflow(tools, f"{sensor} {mode}", screen, previous)
-    assert "어느 펌프" in reply.message
-    assert len(reply.choices) == (7 if "트렌드" in mode else 6)
-    assert reply.navigation_href is None and reply.trend_intent is None
-    chosen = await run_chat_workflow(tools, "펌프2번", screen, reply.context)
+    assert not reply.choices
     if "트렌드" in mode:
-        assert chosen.trend_intent["equipmentId"] == "P2"
-        assert all(s["sensorId"].startswith("P2-") for s in chosen.trend_intent["series"])
+        assert reply.trend_intent["equipmentId"] == "P4"
+        assert all(s["sensorId"].startswith("P4-") for s in reply.trend_intent["series"])
     elif "현황" in mode:
-        assert "equip_id=P2" in chosen.navigation_href
+        assert "equip_id=P4" in reply.navigation_href
     else:
-        assert "펌프 2" in chosen.message and "12.3" in chosen.message
+        assert "펌프 4" in reply.message and "12.3" in reply.message
 
 
 async def test_pump_choice_then_sensor_choice_preserves_period(tools):

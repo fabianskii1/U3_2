@@ -217,8 +217,8 @@ async def test_chat_routes_to_rankings_and_sensor_links_with_followup_context(mo
                 unit_status = await send("1호기 내부 펌프 목록 보여줘")
                 assert event_data(unit_status, "navigate") == [{"href": unit_href}]
                 unit_sensor = await send("1호기 전류")
-                assert "펌프를 선택해 주세요" in unit_sensor and unit_href in unit_sensor
-                assert not event_data(unit_sensor, "navigate")
+                assert "전체 펌프" in unit_sensor
+                assert "compare_sensor=AMP" in event_data(unit_sensor, "navigate")[0]["href"]
                 for number in range(2, 7):
                     assert not event_data(await send(f"{number}호기"), "citation")
                     assert not event_data(await send(f"{number}호기 진동 추이"), "citation")

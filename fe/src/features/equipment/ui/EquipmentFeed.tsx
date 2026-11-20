@@ -94,7 +94,7 @@ export function EquipmentFeed({
   }
 
   return (
-    <Card className="equipment-feed-panel">
+    <Card className="equipment-feed-panel" data-chat-section="feed">
       <div className="equipment-feed-header">
         <div>
           <h2>지금 봐야 할 알림</h2>

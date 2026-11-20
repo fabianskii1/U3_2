@@ -75,6 +75,10 @@ export function selectionParams(
     "selected_sensor_id",
     "viewId",
     "page",
+    "section",
+    "mode",
+    "fault",
+    "incident_id",
   ])
     p.delete(key);
   if (selection.plantId) p.set("plant_id", selection.plantId);

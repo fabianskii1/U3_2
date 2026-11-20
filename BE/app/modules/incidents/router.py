@@ -31,6 +31,7 @@ async def incidents(
     as_of: datetime | None = Query(default=None, description="상태 판정 기준 시각"),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None, max_length=256),
+    search: str | None = Query(default=None, max_length=200),
     db: AsyncSession = Depends(get_session),
 ):
     valid_range(from_time, to_time)
@@ -48,6 +49,7 @@ async def incidents(
         as_of=as_of,
         limit=limit,
         cursor=cursor,
+        search=search,
     )
 
 

@@ -93,10 +93,30 @@ async def list_incidents(
     as_of: datetime | None = None,
     limit: int = 50,
     cursor: str | None = None,
+    search: str | None = None,
 ) -> dict[str, Any]:
     as_of = (as_of or datetime.now(UTC)).astimezone(UTC)
     state = status_expression(as_of)
     stmt = _summary_query(as_of)
+    if search:
+        searchable = func.replace(
+            func.lower(
+                func.concat_ws(
+                    " ",
+                    incident.c.incident_id,
+                    equipment.c.equipment_id,
+                    equipment.c.equipment_name,
+                    incident.c.lead_sensor_id,
+                    lead_sensor.c.measurement_name,
+                    diagnosis_type.c.error_type_name,
+                    top_risk_type.c.error_type_name,
+                )
+            ),
+            " ",
+            "",
+        )
+        # Literal substring search; SQL wildcard characters are not commands.
+        stmt = stmt.where(searchable.contains(search.lower().replace(" ", ""), autoescape=True))
     for column, value in (
         (incident.c.plant_id, plant_id),
         (incident.c.equipment_group_id, equipment_group_id),

@@ -269,25 +269,32 @@ export function MaintenanceReportForm({
         <div className="mr-grid mr-grid-2 mr-spaced">
           <ReportField
             label="당시 운전 조건"
+            multiline
             value={m.incident.operatingConditions}
             editing={editing}
             onChange={(v) => updateIncident("operatingConditions", v)}
-            placeholder="당시 온도 / RPM / 유량 등 · 현재값과 구분하여 입력"
+            placeholder={
+              m.original.fieldNotes?.operatingConditions ||
+              "당시 온도 / RPM / 유량 등 · 현재값과 구분하여 입력"
+            }
           />
           <ReportField
             label="설비 위치"
+            placeholder={m.original.fieldNotes?.location || "미입력"}
             value={m.incident.location}
             editing={editing}
             onChange={(v) => updateIncident("location", v)}
           />
           <ReportField
             label="제조사"
+            placeholder={m.original.fieldNotes?.manufacturer || "미입력"}
             value={m.incident.manufacturer}
             editing={editing}
             onChange={(v) => updateIncident("manufacturer", v)}
           />
           <ReportField
             label="모델"
+            placeholder={m.original.fieldNotes?.model || "미입력"}
             value={m.incident.model}
             editing={editing}
             onChange={(v) => updateIncident("model", v)}
@@ -296,6 +303,7 @@ export function MaintenanceReportForm({
         <div className="mr-spaced">
           <ReportField
             label="최근 정비 이력"
+            placeholder={m.original.fieldNotes?.recentMaintenance || "미입력"}
             value={m.incident.recentMaintenance}
             editing={editing}
             onChange={(v) => updateIncident("recentMaintenance", v)}
@@ -349,14 +357,19 @@ export function MaintenanceReportForm({
           </p>
           {m.original.legacyCause && (
             <p className="small">
-              이전 보고서의 추정 원인: {m.original.legacyCause} (확정 여부
-              미확인)
+              {m.original.incident
+                ? "사건 초안의 추정 원인"
+                : "이전 보고서의 추정 원인"}
+              : {m.original.legacyCause} (확정 여부 미확인)
             </p>
           )}
           {m.original.legacyAction && (
             <p className="small">
-              이전 보고서의 조치 기록: {m.original.legacyAction} (이번 실제 수행
-              조치에 자동 입력하지 않음)
+              {m.original.incident
+                ? "사건 초안의 조치 참고"
+                : "이전 보고서의 조치 기록"}
+              : {m.original.legacyAction} (이번 실제 수행 조치에 자동 입력하지
+              않음)
             </p>
           )}
         </details>

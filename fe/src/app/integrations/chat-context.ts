@@ -12,9 +12,16 @@ import {
   useSelectionStore,
   type Hierarchy,
 } from "../../features/hierarchy/index.ts";
+import { replayHourFromParams } from "../../features/equipment/model/replay-navigation.ts";
+import {
+  CONSOLE_MAX_HOUR,
+  consoleHourDate,
+  hasConsoleTimeline,
+} from "../../features/equipment/model/equipment-alarm-state.ts";
 import { comparisonSensors } from "../../features/trend/model/comparison-sensors.ts";
 import { queryClient } from "../providers/query-client.ts";
 import { savedTrendQuery } from "../../features/trend/api/trend-view.queries.ts";
+import { incidentQuery } from "../../features/incidents/api/incidents.queries.ts";
 import { remoteApi } from "../../shared/api/be-adapter.ts";
 export function buildChatContext(
   message: string,
@@ -31,8 +38,16 @@ export function buildChatContext(
   const draft = state.activeReportId
     ? state.drafts[state.activeReportId]
     : undefined;
+  const incidentId = path.startsWith("/incidents/")
+    ? decodeURIComponent(path.split("/")[2])
+    : undefined;
+  const incidentView = incidentId
+    ? queryClient.getQueryData(
+        incidentQuery(incidentId, params.get("as_of") ?? undefined).queryKey,
+      )
+    : undefined;
   const equipment = hierarchy.equipment.find(
-    (e) => e.id === selection.equipmentId,
+    (e) => e.id === (selection.equipmentId ?? incidentView?.equipment_id),
   );
   const range = defaultRange();
   const sensor = equipment?.tags.find((t) => t.id === selection.sensorIds[0]);
@@ -51,7 +66,7 @@ export function buildChatContext(
   const customRange = params.has("view_from") || params.has("view_to");
   const allTags = hierarchy.equipment.flatMap((e) => e.tags);
   const comparison =
-    params.get("compare") === "all"
+    path === "/trend" && !viewId && !selection.equipmentId && selection.unitId
       ? (comparisonSensors.find(
           (kind) => kind.id === params.get("compare_sensor"),
         ) ?? comparisonSensors[0])
@@ -93,14 +108,32 @@ export function buildChatContext(
           end: bounds.to,
           label: allTags.find((tag) => tag.id === id)?.name,
         })));
+  const replayUnit = selection.unitId ?? equipment?.unitId;
+  const replayAvailable =
+    hierarchy.units.some(
+      (unit) => unit.id === replayUnit && unit.processType === "CDU",
+    ) &&
+    hierarchy.equipment.some(
+      (asset) => asset.unitId === replayUnit && hasConsoleTimeline(asset),
+    );
+  const replayHour = replayAvailable ? replayHourFromParams(params) : null;
   return {
     message,
     sessionId,
     screenContext: {
       page: path,
-      plantId: selection.plantId,
-      unitId: selection.unitId,
-      equipmentId: selection.equipmentId,
+      query: search,
+      section: params.get("section") ?? undefined,
+      incidentId,
+      asOf:
+        path === "/equip" && replayHour !== null
+          ? consoleHourDate(replayHour).toISOString()
+          : (params.get("as_of") ?? undefined),
+      replayHour: path === "/equip" ? replayHour : undefined,
+      replayMax: CONSOLE_MAX_HOUR,
+      plantId: selection.plantId ?? equipment?.plantId,
+      unitId: selection.unitId ?? equipment?.unitId,
+      equipmentId: selection.equipmentId ?? equipment?.id ?? null,
       sensor: params.get("sensor") ?? undefined,
       sensorIds: selection.sensorIds,
       alarmId: params.get("alarm_id") ?? undefined,

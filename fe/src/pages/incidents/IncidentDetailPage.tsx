@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams, useNavigate } from "react-router";
 import { TriangleAlert } from "lucide-react";
 import {
   STATUS_LABELS,
@@ -21,11 +20,16 @@ import { Button } from "../../shared/ui/button.tsx";
 import { LoadingState } from "../../shared/ui/LoadingState.tsx";
 import { ErrorState } from "../../shared/ui/ErrorState.tsx";
 import { EmptyState } from "../../shared/ui/EmptyState.tsx";
+import { useSectionFocus } from "../../shared/lib/use-section-focus.ts";
 import { dateTime } from "../../shared/lib/date-time.ts";
 
 export function IncidentDetailPage() {
   const { incidentId = "" } = useParams();
-  const query = useQuery(incidentQuery(incidentId));
+  const [params] = useSearchParams();
+  useSectionFocus();
+  const query = useQuery(
+    incidentQuery(incidentId, params.get("as_of") ?? undefined),
+  );
   if (query.isPending) return <LoadingState />;
   if (query.isError)
     return (
@@ -64,7 +68,7 @@ export function IncidentDetailPage() {
           <TriangleAlert size={15} /> {warning}
         </p>
       ))}
-      <Card>
+      <Card data-chat-section="timeline">
         <CardHeader title="경과" description="시각은 KST" />
         <ol className="incident-timeline">
           {timeline(incident).map((step) => (
@@ -106,7 +110,7 @@ export function IncidentDetailPage() {
       <CandidateCard incident={incident} />
       <AlarmCard incident={incident} />
       <TrendCard incident={incident} />
-      <DraftCard incidentId={incident.incident_id} />
+      <DraftCard incident={incident} />
       <Button asChild variant="outline">
         <Link to="/incidents">사건 목록으로</Link>
       </Button>
@@ -116,7 +120,7 @@ export function IncidentDetailPage() {
 
 function CandidateCard({ incident }: { incident: IncidentDetail }) {
   return (
-    <Card>
+    <Card data-chat-section="causes">
       <CardHeader
         title="원인 후보"
         description="분석기 추정 결과이며 확정 원인이 아닙니다."
@@ -152,7 +156,7 @@ function CandidateCard({ incident }: { incident: IncidentDetail }) {
 
 function AlarmCard({ incident }: { incident: IncidentDetail }) {
   return (
-    <Card>
+    <Card data-chat-section="alarms">
       <CardHeader
         title={`관련 알람 ${incident.alarms.length}건`}
         description="등급은 판정 setpoint 등급, 최고 도달은 구간 중 최고 등급"
@@ -214,7 +218,7 @@ function AlarmCard({ incident }: { incident: IncidentDetail }) {
 function TrendCard({ incident }: { incident: IncidentDetail }) {
   const range = incident.trend_window;
   return (
-    <Card>
+    <Card data-chat-section="trend">
       <CardHeader
         title="사건 구간 트렌드"
         description={`${dateTime(range.from)} ~ ${dateTime(range.to)} · 1시간 평균 · 보라색 영역은 사건 구간`}
@@ -292,17 +296,34 @@ function SignalTrend({
   );
 }
 
-function DraftCard({ incidentId }: { incidentId: string }) {
-  const [open, setOpen] = useState(false);
+function DraftCard({ incident }: { incident: IncidentDetail }) {
+  const incidentId = incident.incident_id;
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const open = params.get("draft") === "open";
+  const setOpen = () => {
+    const next = new URLSearchParams(params);
+    next.set("draft", "open");
+    next.set("section", "draft");
+    setParams(next);
+  };
   const draft = useQuery({ ...incidentDraftQuery(incidentId), enabled: open });
+  const createReport = () => {
+    const next = new URLSearchParams({
+      incident_id: incidentId,
+      equip_id: incident.equipment_id,
+    });
+    if (params.get("as_of")) next.set("as_of", params.get("as_of")!);
+    void navigate(`/reports/new?${next}`);
+  };
   return (
-    <Card>
+    <Card data-chat-section="draft">
       <CardHeader
         title="보고서 초안"
         description="사건 정보로 채운 검토용 초안입니다. 원인은 검토 항목입니다."
         action={
           !open && (
-            <Button variant="outline" onClick={() => setOpen(true)}>
+            <Button variant="outline" onClick={setOpen}>
               초안 만들기
             </Button>
           )
@@ -317,22 +338,30 @@ function DraftCard({ incidentId }: { incidentId: string }) {
             retry={() => void draft.refetch()}
           />
         ) : (
-          <dl className="incident-draft">
-            {(
-              [
-                ["제목", draft.data.title],
-                ["증상", draft.data.symptom],
-                ["원인 (검토 필요)", draft.data.cause],
-                ["조치", draft.data.action],
-                ["잔여 위험", draft.data.risk],
-              ] as const
-            ).map(([label, value]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
+          <>
+            <dl className="incident-draft">
+              {(
+                [
+                  ["제목", draft.data.title],
+                  ["증상", draft.data.symptom],
+                  ["원인 (검토 필요)", draft.data.cause],
+                  ["조치", draft.data.action],
+                  ["잔여 위험", draft.data.risk],
+                ] as const
+              ).map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="incident-report-actions">
+              <Button onClick={createReport}>최종 보고서 작성</Button>
+              <span className="small muted">
+                사건·진단 후보·알람·센서·초안을 작성 양식에 가져옵니다.
+              </span>
+            </div>
+          </>
         ))}
     </Card>
   );

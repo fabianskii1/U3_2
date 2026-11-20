@@ -29,7 +29,7 @@ export function DiagnosisPanel({
   );
   const incident =
     list.data?.items.find((item) => item.status === "ongoing") ?? null;
-  const detail = useQuery(incidentQuery(incident?.incident_id ?? ""));
+  const detail = useQuery(incidentQuery(incident?.incident_id ?? "", asOf));
   const selectedFault =
     selection && incident && selection.incidentId === incident.incident_id
       ? selection.fault
@@ -37,7 +37,7 @@ export function DiagnosisPanel({
   const candidates = detail.data?.candidates ?? [];
 
   return (
-    <Card className="diagnosis-panel">
+    <Card className="diagnosis-panel" data-chat-section="diagnosis">
       <CardHeader
         title={`${equipmentId} 진단`}
         description="분석기 추정 결과 · 고장 유형을 선택하면 3D 부품 표시가 바뀝니다."

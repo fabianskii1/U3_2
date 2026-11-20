@@ -1,5 +1,5 @@
 import type { CellContext } from "@tanstack/react-table";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import type { Alarm } from "../api/alarms.schema.ts";
 import type { Equipment } from "../../../shared/api/contracts/hierarchy.ts";
 import { DataTable } from "../../../shared/ui/DataTable.tsx";
@@ -15,10 +15,15 @@ export function AlarmTable({
   alarms: Alarm[];
   equipment: Equipment[];
 }) {
+  const navigate = useNavigate();
+  const href = (alarm: Alarm) =>
+    `/equip?equip_id=${encodeURIComponent(alarm.equipmentId)}&sensor_id=${encodeURIComponent(alarm.tagId)}`;
   return (
     <DataTable
       label="알람 목록"
       data={alarms}
+      onRowClick={(alarm) => void navigate(href(alarm))}
+      rowLabel={(alarm) => `${alarm.equipmentId} ${alarm.tagId} 알람 설비 열기`}
       columns={[
         {
           accessorKey: "severity",
@@ -33,10 +38,7 @@ export function AlarmTable({
           accessorKey: "equipmentId",
           header: "설비",
           cell: ({ row }) => (
-            <Link
-              className="equipment-link"
-              to={`/equip?equip_id=${encodeURIComponent(row.original.equipmentId)}&sensor_id=${encodeURIComponent(row.original.tagId)}`}
-            >
+            <Link className="equipment-link" to={href(row.original)}>
               {equipment.find((e) => e.id === row.original.equipmentId)?.name ??
                 row.original.equipmentId}
               <small>{row.original.equipmentId}</small>

@@ -192,6 +192,16 @@ async def test_incident_list_detail_draft_and_alarm_links():
                 ]
                 assert items[0]["diagnosis"] == "테스트 임펠러 마모"
                 assert items[0]["linked_alarm_count"] == 2 and items[0]["alarm_count"] == 3
+                for search in ("임펠러", "T9-PD", "토출", "테스트펌프"):
+                    searched = await client.get(
+                        "/api/incidents", params={"search": search, "as_of": during}
+                    )
+                    assert searched.status_code == 200
+                    assert INC in {item["incident_id"] for item in searched.json()["items"]}
+                literal = await client.get(
+                    "/api/incidents", params={"search": "%_", "as_of": during}
+                )
+                assert literal.status_code == 200 and literal.json()["items"] == []
 
                 before = (START - timedelta(days=10)).isoformat()
                 hidden = await client.get(

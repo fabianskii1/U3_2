@@ -448,6 +448,16 @@ function LegacyTrendPage({
               hierarchy={hierarchy}
               plantId={selection.plantId}
               unitId={selectedGroup.id}
+              selectedKind={
+                comparisonSensors.find(
+                  (kind) => kind.id === params.get("compare_sensor"),
+                )?.id ?? "VIB"
+              }
+              onKindChange={(kind) => {
+                const next = new URLSearchParams(params);
+                next.set("compare_sensor", kind);
+                setParams(next);
+              }}
             />
           )
         ) : (

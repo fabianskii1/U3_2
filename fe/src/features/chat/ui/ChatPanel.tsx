@@ -35,6 +35,9 @@ export function ChatPanel({
   const [streamText, setStreamText] = useState("");
   const controller = useRef<AbortController | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const historyIndex = useRef<number | null>(null);
+  const historyDraft = useRef("");
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [messages.length, pending]);
@@ -75,12 +78,21 @@ export function ChatPanel({
     setPending(true);
     setStreamText("");
     setInput("");
+    historyIndex.current = null;
+    historyDraft.current = "";
     add({ role: "user", content: text });
     try {
       const context = buildContext(text, useChatStore.getState().sessionId);
       const result = await sendChat(context, abort.signal, setStreamText);
       if (abort.signal.aborted) return;
-      await onAction(result);
+      const resolved =
+        !result.action && !result.choices?.length && result.links?.length === 1
+          ? {
+              ...result,
+              action: { type: "navigate" as const, href: result.links[0].href },
+            }
+          : result;
+      await onAction(resolved);
       add({
         role: "assistant",
         content:
@@ -245,7 +257,12 @@ export function ChatPanel({
             variant="ghost"
             size="icon"
             disabled={pending || !messages.length}
-            onClick={reset}
+            onClick={() => {
+              reset();
+              historyIndex.current = null;
+              historyDraft.current = "";
+              setInput("");
+            }}
             aria-label="대화 초기화"
           >
             <RotateCcw size={14} />
@@ -258,6 +275,7 @@ export function ChatPanel({
           }}
         >
           <Textarea
+            ref={inputRef}
             aria-label="채팅 메시지"
             value={input}
             maxLength={5000}
@@ -267,8 +285,59 @@ export function ChatPanel({
                 : "설비 상태를 질문해 보세요…"
             }
             rows={3}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              historyIndex.current = null;
+            }}
             onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229)
+                return;
+              if (
+                (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+                !e.shiftKey &&
+                !e.altKey &&
+                !e.ctrlKey &&
+                !e.metaKey
+              ) {
+                const node = e.currentTarget;
+                const boundary =
+                  e.key === "ArrowUp"
+                    ? !input.slice(0, node.selectionStart).includes("\n")
+                    : !input.slice(node.selectionEnd).includes("\n");
+                const history = messages
+                  .filter((message) => message.role === "user")
+                  .map((message) => message.content);
+                if (
+                  boundary &&
+                  history.length &&
+                  (e.key === "ArrowUp" || historyIndex.current !== null)
+                ) {
+                  e.preventDefault();
+                  if (historyIndex.current === null) {
+                    historyDraft.current = input;
+                    historyIndex.current = history.length;
+                  }
+                  historyIndex.current = Math.max(
+                    0,
+                    Math.min(
+                      history.length,
+                      historyIndex.current + (e.key === "ArrowUp" ? -1 : 1),
+                    ),
+                  );
+                  const value =
+                    historyIndex.current === history.length
+                      ? historyDraft.current
+                      : history[historyIndex.current];
+                  setInput(value);
+                  requestAnimationFrame(() =>
+                    inputRef.current?.setSelectionRange(
+                      value.length,
+                      value.length,
+                    ),
+                  );
+                }
+                return;
+              }
               if (
                 e.key === "Enter" &&
                 !e.shiftKey &&

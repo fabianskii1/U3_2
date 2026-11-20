@@ -40,6 +40,12 @@ export const sendChat = async (
     message: request.message,
     screen_context: {
       page: context.page,
+      query: context.query ?? "",
+      section: context.section ?? null,
+      incident_id: context.incidentId ?? null,
+      as_of: context.asOf ?? null,
+      replay_hour: context.replayHour ?? null,
+      replay_max: context.replayMax ?? null,
       plant_id: context.plantId ?? null,
       equipment_group_id: context.unitId ?? null,
       equipment_id: context.equipmentId,

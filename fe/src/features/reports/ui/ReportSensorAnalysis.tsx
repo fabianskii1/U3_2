@@ -43,10 +43,16 @@ export function ReportSensorAnalysis({
   );
   const reference = Number.isFinite(alarmAt) ? alarmAt : Date.now();
   const [from, setFrom] = useState(() =>
-    kstInput(new Date(reference - 3600_000).toISOString()),
+    kstInput(
+      model.original.incident?.trend_window.from ??
+        new Date(reference - 3600_000).toISOString(),
+    ),
   );
   const [to, setTo] = useState(() =>
-    kstInput(new Date(reference + 90 * 60_000).toISOString()),
+    kstInput(
+      model.original.incident?.trend_window.to ??
+        new Date(reference + 90 * 60_000).toISOString(),
+    ),
   );
   const [hidden, setHidden] = useState<string[]>([]);
   const sensors = model.incident.sensorIds
@@ -69,11 +75,12 @@ export function ReportSensorAnalysis({
     .filter((s): s is ReportSensor => !!s);
   const start = Date.parse(fromKstInput(from));
   const stop = Date.parse(fromKstInput(to));
+  const maxDays = model.original.incident ? 90 : 7;
   const valid =
     Number.isFinite(start) &&
     Number.isFinite(stop) &&
     start < stop &&
-    stop - start <= 7 * 86400000;
+    stop - start <= maxDays * 86400000;
   const queries = useQueries({
     queries: sensors.map((sensor) => ({
       ...trendQuery(
@@ -127,8 +134,8 @@ export function ReportSensorAnalysis({
       </div>
       {!valid && (
         <p role="alert" className="mr-validation">
-          조회 기간을 확인해 주세요. 최대 7일의 알람 전후 구간을 조회할 수
-          있습니다.
+          조회 기간을 확인해 주세요. 최대 {maxDays}일의 알람 전후 구간을 조회할
+          수 있습니다.
         </p>
       )}
       {model.original.kind === "example" && (

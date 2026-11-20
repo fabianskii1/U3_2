@@ -17,6 +17,7 @@ export type IncidentFilters = {
   min_level?: string;
   actionable?: string;
   status?: IncidentStatus;
+  search?: string;
   cursor?: string;
   limit?: number;
 };
@@ -40,14 +41,17 @@ export const incidentsQuery = (filters: IncidentFilters = {}) =>
     staleTime: 30000,
   });
 
-export const incidentQuery = (incidentId: string) =>
+export const incidentQuery = (incidentId: string, asOf?: string) =>
   queryOptions({
-    queryKey: ["incidents", "detail", incidentId],
+    queryKey: asOf
+      ? ["incidents", "detail", incidentId, asOf]
+      : ["incidents", "detail", incidentId],
     queryFn: async ({ signal }) =>
       incidentDetailSchema.parse(
         (
           await http.get(`/incidents/${encodeURIComponent(incidentId)}`, {
             signal,
+            params: asOf ? { as_of: asOf } : undefined,
           })
         ).data,
       ),

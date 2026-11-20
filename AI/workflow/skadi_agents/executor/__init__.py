@@ -983,8 +983,13 @@ async def _run_legacy_workflow(
 
 async def run_chat_workflow(tools: Toolset, message: str, screen: dict, previous: dict) -> Reply:
     from skadi_agents.workspace import run_workspace
+    from skadi_agents.workspace.console import run_console
 
     message = normalize_request(message)
+    console_reply = await run_console(tools, message, screen, previous)
+    if console_reply is not None:
+        return console_reply
+    previous = {key: value for key, value in previous.items() if key != "console_pending"}
     reply = await run_workspace(tools, message, screen, previous)
     if reply is not None:
         return reply

@@ -20,6 +20,7 @@ export function EquipmentCards({
   replayHour,
   selectedEquipmentId,
   navigationKey,
+  autoFocus = true,
   onSelect,
 }: {
   groupName: string;
@@ -28,6 +29,7 @@ export function EquipmentCards({
   replayHour?: number | null;
   selectedEquipmentId: string | null;
   navigationKey?: string;
+  autoFocus?: boolean;
   onSelect: (selection: Selection) => void;
 }) {
   const details = useQueries({
@@ -46,7 +48,13 @@ export function EquipmentCards({
     const card = selectedCard.current;
     const container = card?.closest<HTMLElement>(".page-scroll");
     const key = `${navigationKey ?? ""}:${selectedEquipmentId ?? ""}`;
-    if (!card || !container || selectedPending || centered.current === key)
+    if (
+      !autoFocus ||
+      !card ||
+      !container ||
+      selectedPending ||
+      centered.current === key
+    )
       return;
     const frame = window.requestAnimationFrame(() => {
       if (!card.isConnected) return;
@@ -65,10 +73,10 @@ export function EquipmentCards({
       centered.current = key;
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [navigationKey, selectedEquipmentId, selectedPending]);
+  }, [autoFocus, navigationKey, selectedEquipmentId, selectedPending]);
 
   return (
-    <Card className="equipment-cards-panel">
+    <Card className="equipment-cards-panel" data-chat-section="sensors">
       <CardHeader
         title="설비 및 센서"
         description={`${groupName} · 설비 ${equipment.length}대 · ${replayHour == null ? "현재 상태" : "색은 기록 시각의 단계"} · 센서값은 최근 저장값`}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -314,7 +315,18 @@ export function Pump3D({
   replayHour?: number | null;
   faultSelection?: FaultSelection | null;
 }) {
-  const [mode, setMode] = useState<ViewMode>("all");
+  const [params, setParams] = useSearchParams();
+  const requestedMode = params.get("mode");
+  const mode: ViewMode =
+    requestedMode === "ghost" || requestedMode === "only"
+      ? requestedMode
+      : "all";
+  const setMode = (value: ViewMode) => {
+    const next = new URLSearchParams(params);
+    next.set("mode", value);
+    next.set("section", "3d");
+    setParams(next);
+  };
   const incidentQuery = useQuery(
     incidentsQuery({
       equipment_id: equipment.id,
@@ -343,7 +355,7 @@ export function Pump3D({
     ));
 
   return (
-    <Card className="pump-3d-panel">
+    <Card className="pump-3d-panel" data-chat-section="3d">
       <CardHeader
         title={`${equipment.id} 3D 부품`}
         description="선택한 고장 유형의 부품을 강조합니다. 드래그로 회전하고 스크롤로 확대할 수 있습니다."

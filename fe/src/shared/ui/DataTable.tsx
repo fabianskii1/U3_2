@@ -15,10 +15,14 @@ export function DataTable<T>({
   data,
   columns,
   label,
+  onRowClick,
+  rowLabel,
 }: {
   data: T[];
   columns: ColumnDef<T, unknown>[];
   label: string;
+  onRowClick?: (item: T) => void;
+  rowLabel?: (item: T) => string;
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const table = useReactTable({
@@ -75,7 +79,48 @@ export function DataTable<T>({
           </thead>
           <tbody>
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id}>
+              <tr
+                key={row.id}
+                className={onRowClick ? "table-row-link" : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                aria-label={rowLabel?.(row.original)}
+                onClick={
+                  onRowClick
+                    ? (event) => {
+                        if (
+                          event.defaultPrevented ||
+                          event.button !== 0 ||
+                          event.ctrlKey ||
+                          event.metaKey ||
+                          event.shiftKey ||
+                          event.altKey
+                        )
+                          return;
+                        if (
+                          (event.target as HTMLElement).closest(
+                            "a, button, input, select",
+                          )
+                        )
+                          return;
+                        if (window.getSelection()?.toString()) return;
+                        onRowClick(row.original);
+                      }
+                    : undefined
+                }
+                onKeyDown={
+                  onRowClick
+                    ? (event) => {
+                        if (
+                          event.target !== event.currentTarget ||
+                          !["Enter", " "].includes(event.key)
+                        )
+                          return;
+                        event.preventDefault();
+                        onRowClick(row.original);
+                      }
+                    : undefined
+                }
+              >
                 {row.getVisibleCells().map((cell) => (
                   <td key={cell.id}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}

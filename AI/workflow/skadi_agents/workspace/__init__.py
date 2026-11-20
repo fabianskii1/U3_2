@@ -473,6 +473,33 @@ async def run_workspace(tools, message: str, screen: dict, previous: dict):
     if chosen_entity:
         targets = [chosen_entity.id]
         target = None
+    # Short follow-ups use the scope actually visible on the current screen.
+    scoped_followup = bool(
+        labels
+        and not targets
+        and not target
+        and not ALL.search(text)
+        and screen.get("page") in {"/trend", "/equip", "/dashboard"}
+        and not re.search(r"다른\s*펌프", text)
+    )
+    if scoped_followup and screen.get("equipment_id"):
+        targets = [screen["equipment_id"]]
+    elif scoped_followup and screen.get("page") == "/trend" and screen.get("equipment_group_id"):
+        if (
+            re.search(r"(?:\?|&)viewId=", str(screen.get("query", "")))
+            and active
+            and getattr(tools, "equipment_for_sensors", None)
+        ):
+            owners = await tools.equipment_for_sensors([s["sensorId"] for s in active])
+            targets = [e.id for e in owners]
+        else:
+            all_entities = [
+                e
+                for e in await tools.equipment_of_type("펌프")
+                if e.unit_id == screen["equipment_group_id"]
+            ]
+            targets = [e.id for e in all_entities]
+            all_comparison = bool(targets)
     explicit_reference = bool(
         re.search(
             r"(?:이|그|해당|선택한|선택된)\s*(?:설비|펌프)|현재\s*선택|이어서|도\s*(?:추가|보여|열어)|추가",
@@ -523,6 +550,7 @@ async def run_workspace(tools, message: str, screen: dict, previous: dict):
         and not (view_choice(text) and old.get("series") and not previous.get("sensor_view"))
         and not explicit_reference
         and (not labels or explicit_equip or explicit_trend)
+        and not (page == "/trend" and target and re.search(r"호기|공정|CDU", target, re.IGNORECASE))
         and not (explicit_equip and not labels and not target and not previous.get("sensor_view"))
         and len(labels) <= 1
         and not values
@@ -532,7 +560,7 @@ async def run_workspace(tools, message: str, screen: dict, previous: dict):
         and not re.search(r"추가|비교|이번|전체|전부|모든|도\s*(?:보여|열어)|온도|압력", text)
     ):
         return None
-    if "다른 펌프" in text:
+    if "다른 펌프" in text and not targets and not chosen_entity:
         entities = await tools.equipment_of_type("펌프")
         entities = [
             e
@@ -596,6 +624,16 @@ async def run_workspace(tools, message: str, screen: dict, previous: dict):
                 )
             return response(f"‘{markdown_text(phrase)}’에 해당하는 설비나 공정을 찾지 못했습니다.")
         entities.append(candidates[0])
+    if len(entities) == 1 and entities[0].kind == "unit" and page == "/trend":
+        group = entities[0]
+        entities = [e for e in await tools.equipment_of_type("펌프") if e.unit_id == group.id]
+        if not entities:
+            return response("이 공정에는 트렌드를 표시할 펌프가 없습니다.")
+        all_entities, all_comparison = entities, True
+        if not labels and not chosen_sensor:
+            # Opening a group graph must not expand the previous pump's eight sensors
+            # into 48 series. The group's initial comparison is vibration.
+            labels = ["진동"]
     if any(e.kind != "equipment" for e in entities):
         entity = entities[0]
         if page == "/trend" or values or labels:

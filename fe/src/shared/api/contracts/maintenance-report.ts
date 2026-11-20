@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { incidentDetailSchema } from "./incident.ts";
 
 export const causeCandidateSchema = z.object({
   id: z.string(),
@@ -30,6 +31,22 @@ export const reportSensorSchema = z.object({
     .array(z.object({ time: z.string(), value: z.number().nullable() }))
     .optional(),
 });
+export const operatingReadingsSchema = z.object({
+  referenceTime: z.string(),
+  lookbackMinutes: z.number(),
+  readings: z.array(
+    z.object({
+      sensorId: z.string(),
+      name: z.string(),
+      unit: z.string(),
+      value: z.number(),
+      measuredAt: z.string(),
+    }),
+  ),
+  missing: z.array(z.string()),
+  failed: z.array(z.string()),
+});
+export type OperatingReadings = z.infer<typeof operatingReadingsSchema>;
 export const maintenanceReportSchema = z.object({
   schemaVersion: z.literal(1),
   status: z.enum(["draft", "review", "confirmed"]),
@@ -54,6 +71,9 @@ export const maintenanceReportSchema = z.object({
     legacyCause: z.string(),
     legacyAction: z.string(),
     referenceNotes: z.array(z.string()).optional(),
+    incident: incidentDetailSchema.optional(),
+    fieldNotes: z.record(z.string(), z.string()).optional(),
+    operatingReadings: operatingReadingsSchema.optional(),
   }),
   incident: z.object({
     eventId: z.string(),

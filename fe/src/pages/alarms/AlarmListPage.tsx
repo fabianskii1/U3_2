@@ -1,3 +1,4 @@
+import { Input } from "../../shared/ui/input.tsx";
 import { useSearchParams } from "react-router";
 import type { Hierarchy, Selection } from "../../features/hierarchy/index.ts";
 import { AlarmTable, type Alarm } from "../../features/alarms/index.ts";
@@ -28,18 +29,29 @@ export function AlarmListPage({
   const to = params.get("to") ?? range.to;
   const severity = params.get("severity") ?? "";
   const eventType = params.get("event_type");
+  const search = (params.get("q") ?? "").replace(/\s+/g, "").toLowerCase();
+  const sensorIds = params.getAll("sensor_id");
   const bounds = dateBounds(from, to);
   const valid = validDateRange(from, to);
   const filtered = !valid
     ? []
     : alarms.filter((a) => {
         const eq = hierarchy.equipment.find((e) => e.id === a.equipmentId);
+        const tag = eq?.tags.find((tag) => tag.id === a.tagId);
+        const searchable =
+          `${a.equipmentId} ${eq?.name ?? ""} ${a.tagId} ${tag?.name ?? ""} ${a.reason} ${a.type}`
+            .replace(/\s+/g, "")
+            .toLowerCase();
         return (
           (!selection.plantId || eq?.plantId === selection.plantId) &&
           (!selection.unitId || eq?.unitId === selection.unitId) &&
           (!selection.equipmentId || eq?.id === selection.equipmentId) &&
+          (!params.get("equipment_type") ||
+            eq?.type === params.get("equipment_type")) &&
           (!severity || alarmFilterValue(a) === severity) &&
           (!eventType || a.eventType === eventType) &&
+          (!search || searchable.includes(search)) &&
+          (!sensorIds.length || sensorIds.includes(a.tagId)) &&
           a.occurredAt >= new Date(bounds.from).toISOString() &&
           a.occurredAt <= new Date(bounds.to).toISOString()
         );
@@ -62,6 +74,17 @@ export function AlarmListPage({
       </div>
       <Card>
         <div className="filter-bar">
+          <Input
+            aria-label="알람 검색"
+            placeholder="설비 · 태그 · 센서 · 진단 검색"
+            value={params.get("q") ?? ""}
+            onChange={(event) => {
+              const next = new URLSearchParams(params);
+              if (event.target.value) next.set("q", event.target.value);
+              else next.delete("q");
+              setParams(next);
+            }}
+          />
           <Select
             aria-label="심각도 필터"
             value={severity}

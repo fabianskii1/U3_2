@@ -29,7 +29,8 @@ export function fromKstInput(value: string) {
 }
 export function safeSourceHref(value: string): string | undefined {
   if (!value || /[\s\\<>]/.test(value)) return;
-  if (/^\/(reports|trend|equip|alarms)(\/|\?|$)/.test(value)) return value;
+  if (/^\/(reports|trend|equip|alarms|incidents)(\/|\?|$)/.test(value))
+    return value;
   try {
     const url = new URL(value);
     if (

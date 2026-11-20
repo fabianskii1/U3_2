@@ -1,5 +1,6 @@
+import { Input } from "../../shared/ui/input.tsx";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router";
+import { Link, useSearchParams, useNavigate } from "react-router";
 import type { Hierarchy, Selection } from "../../features/hierarchy/index.ts";
 import {
   STATUS_LABELS,
@@ -32,6 +33,7 @@ export function IncidentListPage({
     plant_id: selection.plantId ?? undefined,
     equipment_group_id: selection.unitId ?? undefined,
     equipment_id: selection.equipmentId ?? undefined,
+    search: params.get("q") || undefined,
     status: (params.get("status") || undefined) as IncidentStatus | undefined,
     min_level: params.get("min_level") || undefined,
     actionable: params.get("actionable") || undefined,
@@ -78,6 +80,17 @@ export function IncidentListPage({
       </div>
       <Card>
         <div className="filter-bar">
+          <Input
+            aria-label="사건 검색"
+            placeholder="설비 · 태그 · 센서 · 진단 검색"
+            value={params.get("q") ?? ""}
+            onChange={(event) => {
+              const next = new URLSearchParams(params);
+              if (event.target.value) next.set("q", event.target.value);
+              else next.delete("q");
+              setParams(next);
+            }}
+          />
           <Select
             aria-label="상태 필터"
             value={params.get("status") ?? ""}
@@ -146,6 +159,7 @@ export function IncidentListPage({
 }
 
 function IncidentTable({ items }: { items: IncidentSummary[] }) {
+  const navigate = useNavigate();
   return (
     <div className="table-scroll">
       <table aria-label="이상 사건 목록">
@@ -166,7 +180,41 @@ function IncidentTable({ items }: { items: IncidentSummary[] }) {
           {items.map((item) => (
             <tr
               key={item.incident_id}
-              className={item.actionable ? undefined : "row-dimmed"}
+              className={`incident-clickable${item.actionable ? "" : " row-dimmed"}`}
+              tabIndex={0}
+              aria-label={`${item.equipment_name} 사건 상세 열기`}
+              onClick={(event) => {
+                if (
+                  event.defaultPrevented ||
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return;
+                if (
+                  (event.target as HTMLElement).closest(
+                    "a, button, input, select",
+                  )
+                )
+                  return;
+                if (window.getSelection()?.toString()) return;
+                void navigate(
+                  `/incidents/${encodeURIComponent(item.incident_id)}`,
+                );
+              }}
+              onKeyDown={(event) => {
+                if (
+                  event.target !== event.currentTarget ||
+                  !["Enter", " "].includes(event.key)
+                )
+                  return;
+                event.preventDefault();
+                void navigate(
+                  `/incidents/${encodeURIComponent(item.incident_id)}`,
+                );
+              }}
               title={item.actionable ? undefined : item.grade_reason}
             >
               <td>{STATUS_LABELS[item.status]}</td>

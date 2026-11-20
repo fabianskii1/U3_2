@@ -1,5 +1,7 @@
-import { lazy, Suspense, useState } from "react";
-import { useLocation } from "react-router";
+import { lazy, Suspense } from "react";
+import { useLocation, useSearchParams } from "react-router";
+import { useSectionFocus } from "../../shared/lib/use-section-focus.ts";
+import { replayHourFromParams } from "../../features/equipment/model/replay-navigation.ts";
 import type { Hierarchy, Selection } from "../../features/hierarchy/index.ts";
 import type { Alarm } from "../../features/alarms/index.ts";
 import { CDUProcessLayout } from "../../features/equipment/ui/CDUProcessLayout.tsx";
@@ -7,7 +9,6 @@ import { EquipmentCards } from "../../features/equipment/ui/EquipmentCards.tsx";
 import { EquipmentFeed } from "../../features/equipment/ui/EquipmentFeed.tsx";
 import { EquipmentReplayControls } from "../../features/equipment/ui/EquipmentReplayControls.tsx";
 import {
-  CONSOLE_EXAMPLE_HOUR,
   consoleHourDate,
   hasConsoleTimeline,
 } from "../../features/equipment/model/equipment-alarm-state.ts";
@@ -34,12 +35,28 @@ export function EquipmentPage({
   alarms: Alarm[];
   onSelect: (s: Selection) => void;
 }) {
-  const [replayHour, setReplayHour] = useState<number | null>(
-    CONSOLE_EXAMPLE_HOUR,
-  );
-  const [faultSelection, setFaultSelection] = useState<FaultSelection | null>(
-    null,
-  );
+  const [params, setParams] = useSearchParams();
+  useSectionFocus();
+  const replayHour = replayHourFromParams(params);
+  const setReplayHour = (hour: number | null) => {
+    const next = new URLSearchParams(params);
+    next.set("replay", hour === null ? "live" : String(hour));
+    next.set("section", "replay");
+    next.delete("fault");
+    next.delete("incident_id");
+    setParams(next);
+  };
+  const faultSelection: FaultSelection | null =
+    params.get("fault") && params.get("incident_id")
+      ? { incidentId: params.get("incident_id")!, fault: params.get("fault")! }
+      : null;
+  const setFaultSelection = (selected: FaultSelection) => {
+    const next = new URLSearchParams(params);
+    next.set("fault", selected.fault);
+    next.set("incident_id", selected.incidentId);
+    next.set("section", "diagnosis");
+    setParams(next);
+  };
   const location = useLocation();
   const unit = hierarchy.units.find((u) => u.id === selection.unitId);
   const equipment = unit
@@ -87,6 +104,9 @@ export function EquipmentPage({
           replayHour={activeReplayHour}
           selectedEquipmentId={selection.equipmentId}
           navigationKey={location.key}
+          autoFocus={
+            !params.get("section") || params.get("section") === "sensors"
+          }
           onSelect={onSelect}
         />
       )}
