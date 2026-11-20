@@ -11,7 +11,9 @@ RUN pip install --no-cache-dir --no-deps /opt/skadi-agent-workflow
 
 COPY app ./app
 COPY migrations ./migrations
+COPY scripts/check_migration_heads.py ./scripts/check_migration_heads.py
 COPY alembic.ini ./
+RUN python scripts/check_migration_heads.py
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -29,6 +29,8 @@ curl http://127.0.0.1:8000/health
 
 Compose는 DB 준비 후 `migrate` 서비스에서 `alembic upgrade head`를 실행하고 BE·AI·FE를 시작한다. DB 호스트 포트는 `5433`, API 호스트 포트는 `8000`, FE 호스트 포트는 `5173`이다. 컨테이너 사이에서는 DB 호스트 `db:5432`, AI 호스트 `ai:8001`을 사용하며 FE의 `/api/`는 `be:8000`으로 프록시한다. 호스트 포트는 루프백 주소에만 바인딩되고 AI 포트는 외부에 열지 않는다.
 
+마이그레이션에는 항상 하나의 최종 버전(head)만 있어야 한다. 여러 브랜치에서 DB 변경 파일을 동시에 추가했다면 병합 전에 `uv run python scripts/check_migration_heads.py`로 확인하고, 여러 head가 나오면 `uv run alembic merge -m "merge branches" heads`로 병합 파일을 만든다. 이 파일은 변경 이력을 연결하므로 `upgrade()`가 비어 있어도 정상이다. PR 검사와 BE 이미지 빌드에서도 같은 조건을 확인한다.
+
 ## 로컬 실행
 
 ```bash

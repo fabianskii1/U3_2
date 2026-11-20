@@ -1,6 +1,10 @@
 name: Build backend image
 
 on:
+  pull_request:
+    paths:
+      - BE/**
+      - .github/workflows/build.yaml
   push:
     branches: [main]
     paths:
@@ -16,7 +20,6 @@ env:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -58,6 +61,10 @@ jobs:
         working-directory: BE
         run: uv sync --frozen
 
+      - name: Check migration graph
+        working-directory: BE
+        run: uv run --frozen python scripts/check_migration_heads.py
+
       - name: Prepare disposable database
         env:
           DB_CONTAINER: ${{ job.services.db.id }}
@@ -71,7 +78,7 @@ jobs:
       - name: Run backend checks
         working-directory: BE
         run: |
-          uv run --frozen ruff check app migrations tests
+          uv run --frozen ruff check app migrations scripts tests
           uv run --frozen pytest -q
 
       - name: Set up Docker Buildx
@@ -93,6 +100,7 @@ jobs:
         run: bash BE/deploy/ci-smoke.sh "$BE_IMAGE" "$CI_NETWORK"
 
       - name: Log in to Harbor
+        if: github.event_name == 'push'
         uses: docker/login-action@v4
         with:
           registry: harbor.skala-us.com
@@ -100,4 +108,5 @@ jobs:
           password: ${{ secrets.HARBOR_PASSWORD }}
 
       - name: Push tested backend image
+        if: github.event_name == 'push'
         run: docker push "$BE_IMAGE"
