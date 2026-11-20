@@ -1,8 +1,14 @@
-from sqlalchemy import BigInteger, Column, ForeignKey, Table
+from sqlalchemy import BigInteger, Column, ForeignKey, Table, UniqueConstraint
 
 from app.db.base import code_fk, fk, metadata, pk, text, time
 
-error_type = Table("error_type", metadata, pk("error_type_id"), text("error_type_name"))
+error_type = Table(
+    "error_type",
+    metadata,
+    pk("error_type_id"),
+    text("error_type_name"),
+    UniqueConstraint("error_type_name", name="uq_error_type_name"),
+)
 
 
 error_history = Table(

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Hierarchy } from "./contracts/hierarchy.ts";
 import type { Alarm } from "./contracts/alarm.ts";
 import type { Report } from "./contracts/report.ts";
+import { trendIncidentSchema } from "./contracts/incident.ts";
 
 export const remoteApi = import.meta.env.VITE_API_MODE === "remote";
 function sensorSignal(name: string): string {
@@ -58,6 +59,8 @@ const alarm = z.object({
   unit: z.string(),
   alarm_level: z.number().int().min(0).max(4),
   user_message: z.string(),
+  incident_id: z.string().nullish(),
+  peak_level: z.number().int().min(0).max(4).nullish(),
 });
 const report = z.object({
   report_id: id,
@@ -99,6 +102,7 @@ export const beTrend = z.object({
       }),
     )
     .default([]),
+  incidents: z.array(trendIncidentSchema).default([]),
   points: z.array(
     z.object({
       time: z.string(),
@@ -164,6 +168,8 @@ export function mapAlarm(data: unknown, sensors: Hierarchy): Alarm {
     type: raw.alarm_type,
     eventType: raw.event_type ?? undefined,
     reason: raw.user_message,
+    incidentId: raw.incident_id ?? undefined,
+    peakLevel: raw.peak_level ?? undefined,
   };
 }
 export function mapReport(data: unknown): Report {

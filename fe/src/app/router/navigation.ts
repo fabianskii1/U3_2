@@ -90,7 +90,9 @@ export function internalHref(href: string) {
   const url = new URL(href, window.location.origin);
   if (
     url.origin !== window.location.origin ||
-    !/^\/(dashboard|equip|trend|reports|alarms)(\/|$)/.test(url.pathname)
+    !/^\/(dashboard|equip|trend|reports|alarms|incidents)(\/|$)/.test(
+      url.pathname,
+    )
   )
     throw new Error("지원하지 않는 화면 링크입니다.");
   return url.pathname + url.search;

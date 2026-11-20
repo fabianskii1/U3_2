@@ -3,6 +3,7 @@ import type { Alarm } from "../../features/alarms/index.ts";
 import { CDUProcessLayout } from "../../features/equipment/ui/CDUProcessLayout.tsx";
 import { EquipmentCards } from "../../features/equipment/ui/EquipmentCards.tsx";
 import { Card } from "../../shared/ui/card.tsx";
+import { IncidentPanel } from "../../features/incidents/index.ts";
 
 export function EquipmentPage({
   hierarchy,
@@ -39,6 +40,15 @@ export function EquipmentPage({
           equipment={equipment}
           selectedEquipmentId={selection.equipmentId}
           onSelect={onSelect}
+        />
+      )}
+      {selection.equipmentId && (
+        <IncidentPanel
+          title="이상 사건"
+          description="선택한 설비의 최근 사건 · 진단은 추정"
+          filters={{ equipment_id: selection.equipmentId }}
+          emptyText="이 설비에 기록된 이상 사건이 없습니다."
+          moreHref={`/incidents?equip_id=${encodeURIComponent(selection.equipmentId)}`}
         />
       )}
     </div>

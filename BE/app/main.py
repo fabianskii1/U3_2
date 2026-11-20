@@ -16,6 +16,7 @@ from app.modules.chat.router import router as chat_router
 from app.modules.equipment.router import router as equipment_router
 from app.modules.hierarchy.router import router as hierarchy_router
 from app.modules.histories.router import router as histories_router
+from app.modules.incidents.router import router as incidents_router
 from app.modules.manuals.router import router as manuals_router
 from app.modules.reports.router import router as reports_router
 from app.modules.telemetry.router import router as telemetry_router
@@ -30,6 +31,7 @@ app = FastAPI(
         {"name": "설비", "description": "설비 상세와 센서 조회"},
         {"name": "시계열", "description": "센서 트렌드 조회"},
         {"name": "알람", "description": "알람 이력과 CoF 우선순위 조회"},
+        {"name": "이상 사건", "description": "분석기 이상 사건, 원인 후보, 보고서 초안 조회"},
         {"name": "고장·정비 이력", "description": "고장 유형과 고장·정비 이력 조회"},
         {"name": "보고서", "description": "보고서 목록과 상세 조회"},
         {"name": "매뉴얼", "description": "설비 매뉴얼 목록 조회"},
@@ -49,6 +51,7 @@ for domain_router in (
     equipment_router,
     telemetry_router,
     alarms_router,
+    incidents_router,
     histories_router,
     reports_router,
     trend_views_router,

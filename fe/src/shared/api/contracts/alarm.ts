@@ -13,6 +13,8 @@ export const alarmSchema = z.object({
   eventType: z.enum(["예측", "임계치 초과"]).optional(),
   alarmLevel: z.number().int().min(0).max(4).optional(),
   reason: z.string(),
+  incidentId: z.string().optional(),
+  peakLevel: z.number().int().min(0).max(4).optional(),
 });
 export const alarmsResponseSchema = z.object({
   alarms: z.array(alarmSchema),

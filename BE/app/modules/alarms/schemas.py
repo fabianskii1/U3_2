@@ -25,6 +25,10 @@ class AlarmRecord(BaseModel):
     cof_score: float | None
     unit: str
     user_message: str
+    incident_id: str | None = Field(default=None, description="연결된 이상 사건 ID")
+    peak_level: int | None = Field(
+        default=None, description="구간 중 도달한 최고 등급. alarm_level은 판정 setpoint 등급."
+    )
 
 
 class AlarmHistory(BaseModel):
@@ -42,6 +46,10 @@ class RankedAlarm(AlarmRecord):
     prediction_count: int
     threshold_exceeded_count: int
     condition_count: int = Field(description="해당 설비의 활성 센서·setpoint 조합 수")
+    diagnosis: str | None = Field(default=None, description="연결 사건의 진단(추정)")
+    incident_score: float | None = Field(
+        default=None, description="연결 사건 점수. 순위에는 쓰지 않는다."
+    )
 
 
 class AlarmPrioritySummary(BaseModel):

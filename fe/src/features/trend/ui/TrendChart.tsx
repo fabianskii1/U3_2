@@ -61,9 +61,8 @@ export function trendYAxis(values: Iterable<number | null>) {
     15,
     Math.max(0, -Math.floor(Math.log10(step)) + 1),
   );
-  const ticks = Array.from(
-    { length: lastTick - firstTick + 1 },
-    (_, index) => Number(((firstTick + index) * step).toFixed(fractionDigits)),
+  const ticks = Array.from({ length: lastTick - firstTick + 1 }, (_, index) =>
+    Number(((firstTick + index) * step).toFixed(fractionDigits)),
   );
   return {
     domain: [ticks[0], ticks[ticks.length - 1]] as [number, number],
@@ -136,18 +135,52 @@ export function violationRanges(
   return ranges;
 }
 
+export type ChartIncident = {
+  id: string;
+  from: string;
+  to: string | null;
+  label: string;
+};
+export type ChartMarker = { time: string; label: string };
+
+/** Snap an instant onto the categorical x-axis; null when outside the plotted range. */
+export function snapTime(
+  points: { time: string }[],
+  instant: string,
+  side: "start" | "end",
+): string | null {
+  const target = Date.parse(instant);
+  if (!points.length || !Number.isFinite(target)) return null;
+  const times = points.map((point) => Date.parse(point.time));
+  if (side === "start") {
+    if (target > times.at(-1)!) return null;
+    const index = times.findIndex((time) => time >= target);
+    return points[index].time;
+  }
+  if (target < times[0]) return null;
+  let index = times.length - 1;
+  while (index > 0 && times[index] > target) index -= 1;
+  return points[index].time;
+}
+
 export function TrendChart({
   interval = "1h",
   points,
   limit,
   unit,
   setpoints = [],
+  incidents = [],
+  markers = [],
+  onIncidentClick,
 }: {
   interval?: SensorInterval;
   points: { time: string; value: number | null }[];
   limit: number | null;
   unit: string;
   setpoints?: ChartSetpoint[];
+  incidents?: ChartIncident[];
+  markers?: ChartMarker[];
+  onIncidentClick?: (id: string) => void;
 }) {
   const first = Date.parse(points[0]?.time ?? "");
   const last = Date.parse(points.at(-1)?.time ?? "");
@@ -190,6 +223,21 @@ export function TrendChart({
       })),
     );
   });
+  const incidentAreas = incidents.flatMap((item) => {
+    const x1 = snapTime(points, item.from, "start");
+    const x2 = snapTime(
+      points,
+      item.to ?? points.at(-1)?.time ?? item.from,
+      "end",
+    );
+    return x1 && x2 && Date.parse(x1) <= Date.parse(x2)
+      ? [{ ...item, x1, x2 }]
+      : [];
+  });
+  const markerLines = markers.flatMap((item) => {
+    const x = snapTime(points, item.time, "start");
+    return x ? [{ ...item, x }] : [];
+  });
   const hasUnknown = setpoints.some((rule) => rule.value === null);
   const hasPartial = setpoints.some(
     (rule) => rule.value !== null && !boundaries.includes(rule),
@@ -200,7 +248,7 @@ export function TrendChart({
       <div
         className="trend-chart"
         role="img"
-        aria-label={`시계열 차트, 단위 ${unit}, 추세선, setpoint 경계 ${boundaries.length}개`}
+        aria-label={`시계열 차트, 단위 ${unit}, 추세선, setpoint 경계 ${boundaries.length}개${incidentAreas.length ? `, 이상 사건 구간 ${incidentAreas.length}개` : ""}`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
@@ -261,6 +309,41 @@ export function TrendChart({
                 fontSize: 12,
               }}
             />
+            {incidentAreas.map((item) => (
+              <ReferenceArea
+                key={`incident-${item.id}`}
+                x1={item.x1}
+                x2={item.x2}
+                fill="#7c3aed"
+                fillOpacity={0.08}
+                stroke="#7c3aed"
+                strokeOpacity={0.35}
+                strokeDasharray="4 4"
+                ifOverflow="hidden"
+                label={{
+                  value: item.label,
+                  position: "insideTopLeft",
+                  fontSize: 10,
+                }}
+                onClick={
+                  onIncidentClick ? () => onIncidentClick(item.id) : undefined
+                }
+                style={onIncidentClick ? { cursor: "pointer" } : undefined}
+              />
+            ))}
+            {markerLines.map((item, index) => (
+              <ReferenceLine
+                key={`marker-${index}`}
+                x={item.x}
+                stroke="#7c3aed"
+                strokeDasharray="2 3"
+                label={{
+                  value: item.label,
+                  position: "insideBottomLeft",
+                  fontSize: 10,
+                }}
+              />
+            ))}
             {bands.map(({ rule, from, to, x1, x2 }, index) => (
               <ReferenceArea
                 key={`${rule.setpoint_id}-${index}`}

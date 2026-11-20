@@ -11,6 +11,7 @@ from app.modules.histories.models import (
     error_type,
     maintenance_history,
 )
+from app.modules.incidents.models import incident, incident_candidate
 from app.modules.manuals.models import equipment_manual
 from app.modules.reports.models import (
     report,
@@ -46,6 +47,8 @@ __all__ = [
     "error_history",
     "error_history_types",
     "error_type",
+    "incident",
+    "incident_candidate",
     "maintenance_history",
     "metadata",
     "plant",

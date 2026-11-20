@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 from skadi_agents.action_planner import plan
 from skadi_agents.equipment_status import Entity, matching_sensors, sensor_signal
+from skadi_agents.incident import format_incident, format_incident_list
 from skadi_agents.inspection_evidence import (
     InspectionEvidence,
     format_inspection_evidence,
@@ -35,6 +36,8 @@ class Toolset:
     get_alarm: Callable[[str, object], Awaitable[dict | None]]
     get_inspection_evidence: Callable[[str], Awaitable[InspectionEvidence]]
     get_initial_alarm_report: Callable[[str, object], Awaitable[dict | None]]
+    list_incidents: Callable[..., Awaitable[dict]] | None = None
+    get_incident: Callable[[str], Awaitable[dict | None]] | None = None
 
 
 @dataclass
@@ -475,6 +478,11 @@ async def _priority_reply(
             f" · {severity[item['alarm_level']]} · {event_type} · CoF **{item['cof_score']:g}**"
             f" · {_alarm_date_label(item['alarm_start_time'])} 발생{setpoint}{reason}"
         )
+        if item.get("diagnosis"):
+            lines.append(
+                f"   관련 이상 사건 진단(추정) · {markdown_text(item['diagnosis'])}"
+                f" · 사건 점수 {item['incident_score']:g} (순위에는 쓰지 않음)"
+            )
         if request.priority_group == "equipment":
             lines.append(
                 f"   활성 {item['equipment_active_count']}건 · 예측 {item['prediction_count']}건"
@@ -497,6 +505,13 @@ async def _priority_reply(
         lines.append(f"CoF 미평가 {snapshot['unscored_count']}건")
     if snapshot["unknown_count"]:
         lines.append(f"활성 상태 미확인 이력 {snapshot['unknown_count']}건")
+    for item in items:
+        if item.get("incident_id"):
+            links.append(
+                _link(
+                    f"{item['equipment_name']} 이상 사건 보기", f"/incidents/{item['incident_id']}"
+                )
+            )
     links.append(_link("알람 이력 보기", history))
     context = {
         "alarm_priority_scope": entity.id if entity else None,
@@ -514,6 +529,8 @@ async def _priority_reply(
                 for key in ("alarm_id", "equipment_id", "sensor_id", "has_initial_report")
             }
         )
+        if selected.get("incident_id"):
+            context["incident_id"] = selected["incident_id"]
     return Reply("\n\n".join(lines), links, context)
 
 
@@ -686,6 +703,67 @@ async def _show_equipment(
     )
 
 
+async def _incident_reply(
+    tools: Toolset, request: Reflection, screen: dict[str, object], previous: dict
+) -> Reply:
+    if tools.list_incidents is None or tools.get_incident is None:
+        return Reply("이상 사건 조회를 사용할 수 없습니다.", context=previous)
+
+    async def detail_reply(incident_id: str) -> Reply:
+        detail = await tools.get_incident(incident_id)
+        if detail is None:
+            return Reply("이상 사건을 찾을 수 없습니다.", context=previous)
+        text, links = format_incident(detail)
+        context = previous if previous.get("equipment_id") == detail["equipment_id"] else {}
+        return Reply(
+            text,
+            links,
+            {**context, "equipment_id": detail["equipment_id"], "incident_id": incident_id},
+        )
+
+    if request.relative and "알람" in request.relative:
+        alarm = (
+            await tools.get_alarm(previous["equipment_id"], previous["alarm_id"])
+            if previous.get("alarm_id") and previous.get("equipment_id")
+            else None
+        )
+        if alarm is None:
+            return Reply("사건을 확인할 알람을 먼저 선택해 주세요.", context=previous)
+        if not alarm.get("incident_id"):
+            return Reply("선택한 알람에 연결된 이상 사건이 없습니다.", context=previous)
+        return await detail_reply(alarm["incident_id"])
+    if not request.target and not request.incident_list and previous.get("incident_id"):
+        return await detail_reply(previous["incident_id"])
+
+    entity = None
+    if request.target or any(
+        screen.get(key) for key in ("equipment_id", "equipment_group_id", "plant_id")
+    ):
+        status, candidates = await _resolve_target(tools, request, screen, previous, False)
+        if status != "found" or len(candidates) != 1:
+            return _ask(request, status, candidates, previous)
+        entity = candidates[0]
+    scope = entity.alarm_scope() if entity else {}
+    if request.incident_status:
+        scope["status"] = request.incident_status
+    name = entity.name if entity else "전체 설비"
+    if entity and entity.kind == "equipment" and not request.incident_list:
+        latest = await tools.list_incidents(**scope, limit=1)
+        if not latest["items"]:
+            return Reply(
+                f"**{markdown_text(name)}**에 기록된 이상 사건이 없습니다.",
+                [_link(f"{name} 현황 보기", entity.link("/equip"))],
+                {"equipment_id": entity.id},
+            )
+        return await detail_reply(latest["items"][0]["incident_id"])
+    listing = await tools.list_incidents(**scope, limit=10)
+    text, links = format_incident_list(name, listing)
+    context = {"equipment_id": entity.id} if entity and entity.kind == "equipment" else previous
+    if len(listing["items"]) == 1:
+        context = {**context, "incident_id": listing["items"][0]["incident_id"]}
+    return Reply(text, links, context)
+
+
 async def run_chat_workflow(
     tools: Toolset,
     message: str,
@@ -781,6 +859,8 @@ async def run_chat_workflow(
     if "list_plant_units" in action.tools:
         return await _plant_units_reply(tools, request, screen, previous)
     intent = action.request.intent
+    if intent == "incident":
+        return await _incident_reply(tools, request, screen, previous)
     entity = None
     if request.comparison_targets:
         candidates = []
@@ -882,7 +962,14 @@ async def run_chat_workflow(
             alarm: Mapping[str, object] | None = await tools.get_alarm(
                 entity.id, context.get("alarm_id")
             )
-            text, links = build_maintenance_draft(entity.name, evidence, alarm=alarm)
+            incident = None
+            if tools.get_incident and context.get("incident_id"):
+                incident = await tools.get_incident(context["incident_id"])
+                if incident and incident["equipment_id"] != entity.id:
+                    incident = None
+            text, links = build_maintenance_draft(
+                entity.name, evidence, alarm=alarm, incident=incident
+            )
         else:
             text, links = format_inspection_evidence(entity.name, evidence)
         return Reply(text, links, context)

@@ -1887,3 +1887,90 @@ tbody tr:hover {
 .filter-bar:has(.date-range-time) {
   flex-wrap: wrap;
 }
+
+/* 이상 사건 */
+.incident-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid #f3d19c;
+  border-radius: 8px;
+  background: #fff8eb;
+  color: #8a5a00;
+  font-size: 13px;
+}
+.incident-timeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.incident-timeline li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-left: 3px solid #7c3aed;
+  background: #faf8ff;
+  border-radius: 6px;
+}
+.incident-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 16px 0 0;
+}
+.incident-facts dt,
+.incident-draft dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+.incident-facts dd,
+.incident-draft dd {
+  margin: 2px 0 0;
+  color: var(--ink);
+}
+.incident-candidates {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.incident-candidates > li {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.incident-candidates > li .inline {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.incident-candidates ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.incident-trend h3 {
+  margin: 12px 0 4px;
+  font-size: 14px;
+}
+.incident-draft {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+.incident-draft dd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.incident-row .priority-text span {
+  overflow-wrap: anywhere;
+}
+tr.row-dimmed td {
+  opacity: 0.6;
+}

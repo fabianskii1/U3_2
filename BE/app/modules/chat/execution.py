@@ -22,6 +22,7 @@ from app.modules.chat.assets import (
     resolve_plant,
 )
 from app.modules.chat.evidence import get_inspection_evidence
+from app.modules.incidents.service import get_incident, list_incidents
 
 
 async def _saved_alarm(db: AsyncSession, equipment_id: str, alarm_id: object) -> dict | None:
@@ -74,5 +75,7 @@ async def run_chat_workflow(
         get_alarm=partial(_saved_alarm, db),
         get_initial_alarm_report=partial(_saved_initial_report, db),
         get_inspection_evidence=partial(get_inspection_evidence, db),
+        list_incidents=partial(list_incidents, db),
+        get_incident=partial(get_incident, db),
     )
     return await execute_workflow(tools, message, screen, previous)
