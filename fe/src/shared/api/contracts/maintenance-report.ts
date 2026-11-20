@@ -43,8 +43,8 @@ export const maintenanceReportSchema = z.object({
         equipmentId: z.string(),
         sensorId: z.string(),
         occurredAt: z.string(),
-        value: z.number(),
-        threshold: z.number(),
+        value: z.number().nullable(),
+        threshold: z.number().nullable(),
         unit: z.string(),
         reason: z.string(),
       })

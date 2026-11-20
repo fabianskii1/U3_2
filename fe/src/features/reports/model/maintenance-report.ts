@@ -96,7 +96,7 @@ export function createMaintenance(
     name: tag.name,
     unit: tag.unit,
     baseline: null,
-    observed: tag.id === alarm?.tagId ? alarm.value : null,
+    observed: tag.id === alarm?.tagId ? (alarm.value ?? null) : null,
   }));
   return {
     schemaVersion: 1,
@@ -111,8 +111,8 @@ export function createMaintenance(
             equipmentId: alarm.equipmentId,
             sensorId: alarm.tagId,
             occurredAt: alarm.occurredAt,
-            value: alarm.value,
-            threshold: alarm.limit,
+            value: alarm.value ?? null,
+            threshold: alarm.limit ?? null,
             unit: alarm.unit,
             reason: alarm.reason,
           }
@@ -138,7 +138,7 @@ export function createMaintenance(
       symptoms:
         report.values.symptom ||
         (alarm
-          ? `${alarm.tagId}: ${alarm.value} ${alarm.unit} (기준 ${alarm.limit} ${alarm.unit})\n${alarm.reason}`
+          ? `${alarm.tagId}: ${alarm.value ?? "미제공"} ${alarm.unit} (기준 ${alarm.limit ?? "미제공"} ${alarm.unit})\n${alarm.reason}`
           : ""),
       impact: "",
     },

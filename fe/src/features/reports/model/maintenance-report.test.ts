@@ -12,6 +12,8 @@ import {
 import { useReportDraftStore as store } from "./report-draft.store.ts";
 import { emptyFields, type Report } from "./report.schema.ts";
 import type { Equipment } from "../../../shared/api/contracts/hierarchy.ts";
+import type { Alarm } from "../../../shared/api/contracts/alarm.ts";
+import { maintenanceReportSchema } from "../../../shared/api/contracts/maintenance-report.ts";
 const equipment: Equipment = {
   id: "P1",
   name: "원유 공급 펌프",
@@ -30,6 +32,35 @@ const report: Report = {
 };
 beforeEach(() => store.setState({ drafts: {}, activeReportId: null }));
 describe("현장 원인 확인과 전체 보고서", () => {
+  it("측정값이 없는 연결 알람도 원본 정보와 센서를 보존한다", () => {
+    const alarm: Alarm = {
+      id: "a1",
+      equipmentId: "P1",
+      tagId: "T1",
+      signal: "vibration",
+      severity: "High",
+      unit: "mm/s",
+      occurredAt: "2026-11-19T00:00:00Z",
+      type: "threshold",
+      reason: "진동 확인 필요",
+    };
+    const model = createMaintenance(
+      report,
+      {
+        ...equipment,
+        tags: [{ id: "T1", name: "진동", signal: "vibration", unit: "mm/s" }],
+      },
+      alarm,
+    );
+    expect(model.original.alarm).toMatchObject({
+      id: "a1",
+      value: null,
+      threshold: null,
+    });
+    expect(model.original.sensors[0].observed).toBeNull();
+    expect(model.observations.symptoms).not.toContain("undefined");
+    expect(maintenanceReportSchema.safeParse(model).success).toBe(true);
+  });
   it("AI 1순위를 확정하지 않고 실제 수행 조치를 비워 둔다", () => {
     const m = createExample(report, equipment);
     expect(m.original.aiCandidates[0].id).toBe("seal");

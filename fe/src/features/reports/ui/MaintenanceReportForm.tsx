@@ -323,7 +323,8 @@ export function MaintenanceReportForm({
               <div>
                 <dt>측정값 / 기준값</dt>
                 <dd>
-                  {m.original.alarm.value} / {m.original.alarm.threshold}{" "}
+                  {m.original.alarm.value ?? "미제공"} /{" "}
+                  {m.original.alarm.threshold ?? "미제공"}{" "}
                   {m.original.alarm.unit}
                 </dd>
               </div>
