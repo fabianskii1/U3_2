@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { z } from "zod";
 import { TrendingUp, Info } from "lucide-react";
 import type { Hierarchy, Selection } from "../../features/hierarchy/index.ts";
@@ -287,6 +287,7 @@ function LegacyTrendPage({
   selection: Selection;
 }) {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const eq = hierarchy.equipment.find((e) => e.id === selection.equipmentId);
   const selectedGroup = hierarchy.units.find(
     (unit) =>
@@ -453,7 +454,22 @@ function LegacyTrendPage({
               limit={query.data.limit}
               unit={query.data.unit}
               setpoints={query.data.setpoints}
+              incidents={query.data.incidents.map((item) => ({
+                id: item.incident_id,
+                from: item.incident_start_time,
+                to: item.incident_end_time,
+                label: `사건 · ${item.diagnosis}(추정)`,
+              }))}
+              onIncidentClick={(id) =>
+                void navigate(`/incidents/${encodeURIComponent(id)}`)
+              }
             />
+            {query.data.incidents.length > 0 && (
+              <p className="small muted">
+                보라색 영역은 이상 사건 구간입니다. 영역을 누르면 사건 상세로
+                이동합니다.
+              </p>
+            )}
             <div className="chart-legend">
               <span className="legend-line" /> 실측값{" "}
               {query.data.setpoints.some((rule) => rule.value !== null) ? (

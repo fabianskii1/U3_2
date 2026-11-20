@@ -13,6 +13,7 @@ Intent = Literal[
     "alarm_history",
     "alarm_priority",
     "initial_alarm_report",
+    "incident",
     "trend",
     "inspection_evidence",
     "maintenance_draft",
@@ -92,6 +93,16 @@ ALARM_DATE = re.compile(
     r"(?:Z|[+-]\d{2}:\d{2})?)?(?:\s*KST)?",
     re.IGNORECASE,
 )
+INCIDENT = re.compile(
+    r"이상\s*사건|사건|원인|무슨\s*일|왜\s*(?:떴|발생|울렸|났|생겼)|"
+    r"조치\s*(?:해야|필요)|얼마나\s*급"
+)
+INCIDENT_LIST = re.compile(r"목록|있어|있나|있니|있는지|진행\s*중|발생한|들(?=\s|$)")
+INCIDENT_FILLER = re.compile(
+    r"(?<!\S)(?:지금|현재|최근|이번\s*달|이번달|올해|진행\s*중인?|발생한|목록|있어|있나|있니|"
+    r"있는지|뭐야|뭐예요|뭔가요|알려\s*줘|이야|이에요|인가요|인지)(?=\s|$)|"
+    r"(?:의|이|가|은|는|을|를|에|에서)$"
+)
 PUMP_COMPARISON = re.compile(r"(?i)^P\d+\s*(?:과|와|,|·|\s+및\s+)\s*P\d+\s*비교$")
 ALARM_TYPES = re.compile(r"임계치\s*초과|예측")
 
@@ -113,6 +124,8 @@ class Reflection:
     priority_all: bool = False
     comparison_targets: tuple[str, ...] = ()
     alarm_event_type: str | None = None
+    incident_list: bool = False
+    incident_status: str | None = None
 
 
 def normalize(value: str) -> str:
@@ -174,10 +187,31 @@ def reflect(message: str) -> Reflection:
         intent: Intent = "initial_alarm_report"
     elif re.search(r"보고서|초안", target):
         target = re.split(r"\s*(?:정비\s*(?:조치\s*)?)?보고서|\s*초안", target, maxsplit=1)[0]
+        target = re.sub(r"^(?:이|그|해당)\s*사건(?:으로|의|을|를|로)?$", "", target.strip())
         intent = "maintenance_draft"
     elif re.search(r"점검\s*근거|매뉴얼|유사\s*사례", target):
         target = re.split(r"\s*(?:의\s+)?(?:점검\s*근거|매뉴얼|유사\s*사례)", target, maxsplit=1)[0]
         intent = "inspection_evidence"
+    elif incident := INCIDENT.search(target):
+        stem = target[: incident.start()].strip()
+        listing = bool(
+            INCIDENT_LIST.search(target[incident.start() :]) or INCIDENT_LIST.search(stem)
+        )
+        previous_stem = None
+        while stem != previous_stem:
+            previous_stem = stem
+            stem = INCIDENT_FILLER.sub(" ", stem).strip()
+        compact_stem = normalize(stem)
+        relative = compact_stem if compact_stem in RELATIVE_TARGETS else None
+        if compact_stem in {"이", "그", "해당", "이사건", "그사건", "해당사건"}:
+            relative, stem = "그알람", ""
+        return Reflection(
+            "incident",
+            target=None if relative else stem or None,
+            relative=relative,
+            incident_list=listing and not relative,
+            incident_status="ongoing" if re.search(r"진행\s*중", target) else None,
+        )
     elif PUMP_COMPARISON.fullmatch(target):
         return Reflection(
             "alarm_priority",

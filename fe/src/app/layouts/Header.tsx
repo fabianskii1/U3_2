@@ -8,6 +8,7 @@ import {
   ChartNoAxesCombined,
   FileText,
   Bell,
+  Siren,
 } from "lucide-react";
 import { Badge } from "../../shared/ui/badge.tsx";
 import { remoteApi } from "../../shared/api/be-adapter.ts";
@@ -17,6 +18,7 @@ const menus = [
   { to: "/trend", label: "트렌드", icon: ChartNoAxesCombined },
   { to: "/reports", label: "보고서", icon: FileText },
   { to: "/alarms", label: "알람", icon: Bell },
+  { to: "/incidents", label: "이상 사건", icon: Siren },
 ];
 export function Header({ selection }: { selection: Selection }) {
   const location = useLocation();

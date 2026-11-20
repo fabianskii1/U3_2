@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.database import get_session
 from app.modules.alarms.models import setpoint
 from app.modules.equipment.models import sensor
+from app.modules.incidents.service import incidents_overlapping
 from app.modules.telemetry.models import sensor_signal
 
 router = APIRouter(tags=["시계열"])
@@ -129,6 +130,7 @@ async def trend(
                 "as_of": now(),
                 "threshold_value": None,
                 "setpoints": [],
+                "incidents": [],
             }
         signal = signals[0]
 
@@ -175,6 +177,10 @@ async def trend(
         .all()
     )
     reference_values = get_settings().setpoint_reference_values or {}
+    owner = await db.scalar(
+        select(sensor.c.equipment_id).where(sensor.c.sensor_id == signal["sensor_id"])
+    )
+    incidents = await incidents_overlapping(db, owner, from_time, to_time) if owner else []
     return {
         "sensor_id": signal["sensor_id"],
         "signal_id": signal["signal_id"],
@@ -202,4 +208,5 @@ async def trend(
             }
             for rule in rules
         ],
+        "incidents": incidents,
     }

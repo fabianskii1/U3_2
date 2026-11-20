@@ -6,6 +6,8 @@ import { DataTable } from "../../../shared/ui/DataTable.tsx";
 import { Badge } from "../../../shared/ui/badge.tsx";
 import { dateTime } from "../../../shared/lib/date-time.ts";
 import { alarmLabel } from "../../../shared/lib/alarm-level.ts";
+
+const LEVEL_LABELS = ["정상", "주의", "경고", "위험", "비상"] as const;
 export function AlarmTable({
   alarms,
   equipment,
@@ -42,7 +44,9 @@ export function AlarmTable({
           ),
         },
         { accessorKey: "tagId", header: "태그" },
-        ...(alarms.some((alarm) => alarm.value !== undefined && alarm.limit !== undefined)
+        ...(alarms.some(
+          (alarm) => alarm.value !== undefined && alarm.limit !== undefined,
+        )
           ? [
               {
                 accessorKey: "value",
@@ -55,6 +59,39 @@ export function AlarmTable({
                     </span>
                   </span>
                 ),
+              },
+            ]
+          : []),
+        ...(alarms.some((alarm) => alarm.peakLevel !== undefined)
+          ? [
+              {
+                accessorKey: "peakLevel",
+                header: "최고 도달",
+                cell: ({ row }: CellContext<Alarm, unknown>) =>
+                  row.original.peakLevel === undefined ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    LEVEL_LABELS[row.original.peakLevel]
+                  ),
+              },
+            ]
+          : []),
+        ...(alarms.some((alarm) => alarm.incidentId)
+          ? [
+              {
+                accessorKey: "incidentId",
+                header: "이상 사건",
+                cell: ({ row }: CellContext<Alarm, unknown>) =>
+                  row.original.incidentId ? (
+                    <Link
+                      className="small"
+                      to={`/incidents/${encodeURIComponent(row.original.incidentId)}`}
+                    >
+                      사건 보기
+                    </Link>
+                  ) : (
+                    <span className="muted">—</span>
+                  ),
               },
             ]
           : []),

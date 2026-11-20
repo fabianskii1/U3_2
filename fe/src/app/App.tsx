@@ -61,6 +61,16 @@ const NewReport = lazy(() =>
     default: m.NewReportPage,
   })),
 );
+const Incidents = lazy(() =>
+  import("../pages/incidents/IncidentListPage.tsx").then((m) => ({
+    default: m.IncidentListPage,
+  })),
+);
+const Incident = lazy(() =>
+  import("../pages/incidents/IncidentDetailPage.tsx").then((m) => ({
+    default: m.IncidentDetailPage,
+  })),
+);
 const Alarms = lazy(() =>
   import("../pages/alarms/AlarmListPage.tsx").then((m) => ({
     default: m.AlarmListPage,
@@ -186,6 +196,11 @@ export function App() {
                 />
               }
             />
+            <Route
+              path="/incidents"
+              element={<Incidents hierarchy={data} selection={selection} />}
+            />
+            <Route path="/incidents/:incidentId" element={<Incident />} />
             <Route
               path="/reports"
               element={<Reports hierarchy={data} selection={selection} />}

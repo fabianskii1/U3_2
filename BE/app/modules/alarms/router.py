@@ -53,6 +53,7 @@ async def alarm_history(
     sensor_id: str | None = None,
     alarm_level: int | None = Query(default=None, ge=0, le=4),
     event_type: AlarmEventType | None = None,
+    incident_id: str | None = Query(default=None, max_length=64),
     from_time: datetime | None = Query(default=None, alias="from"),
     to_time: datetime | None = Query(default=None, alias="to"),
     limit: int = Query(default=50, ge=1, le=200),
@@ -72,6 +73,7 @@ async def alarm_history(
         (alarm.c.sensor_id, sensor_id),
         (alarm.c.alarm_level, alarm_level),
         (alarm.c.event_type, event_type),
+        (alarm.c.incident_id, incident_id),
     ):
         if value is not None:
             stmt = stmt.where(column == value)

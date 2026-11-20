@@ -8,6 +8,8 @@ from app.common.query import serialize
 from app.modules.alarms.models import alarm, alarm_intake
 from app.modules.alarms.schemas import PriorityGroup
 from app.modules.equipment.models import equipment, sensor
+from app.modules.histories.models import error_type
+from app.modules.incidents.models import incident
 
 
 def _historical_state(as_of: datetime):
@@ -140,6 +142,19 @@ async def get_alarm_priorities(
             .where(alarm_intake.c.selected_alarm_id == eligible.c.alarm_id)
             .exists()
             .label("has_initial_report"),
+            select(error_type.c.error_type_name)
+            .select_from(
+                incident.join(
+                    error_type, error_type.c.error_type_id == incident.c.diagnosis_error_type_id
+                )
+            )
+            .where(incident.c.incident_id == eligible.c.incident_id)
+            .scalar_subquery()
+            .label("diagnosis"),
+            select(incident.c.incident_score)
+            .where(incident.c.incident_id == eligible.c.incident_id)
+            .scalar_subquery()
+            .label("incident_score"),
         )
         .join(equipment_counts, eligible.c.equipment_id == equipment_counts.c.equipment_id)
         .order_by(*order)

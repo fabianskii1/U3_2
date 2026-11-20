@@ -20,6 +20,7 @@ import { defaultRange, dateBounds } from "../../shared/lib/date-time.ts";
 import { LoadingState } from "../../shared/ui/LoadingState.tsx";
 import { alarmLabel, alarmFilterValue } from "../../shared/lib/alarm-level.ts";
 import { remoteApi } from "../../shared/api/be-adapter.ts";
+import { IncidentPanel } from "../../features/incidents/index.ts";
 export function DashboardPage({
   hierarchy,
   alarms,
@@ -274,6 +275,13 @@ export function DashboardPage({
           ]}
         />
       </Card>
+      <IncidentPanel
+        title="진행 중 이상 사건"
+        description="분석기 사건 · 진단은 추정 · 알람 우선순위와 별도"
+        filters={{ status: "ongoing" }}
+        emptyText="진행 중인 이상 사건이 없습니다."
+        moreHref="/incidents?status=ongoing"
+      />
       <div className="bottom-callout">
         <div>
           <FilePlus2 size={18} />

@@ -9,6 +9,7 @@ import {
 import { resolve } from "node:path";
 import { z } from "zod";
 import { hierarchy, getAlarms, valueAt } from "./fixtures.ts";
+import { getIncident, incidentDraft, listIncidents } from "./incidents.ts";
 import { answerChat } from "./chat.ts";
 import { chatRequestSchema } from "../src/features/chat/model/chat.schema.ts";
 import {
@@ -44,6 +45,20 @@ export function mockApi(): Plugin {
           asOf: new Date(now).toISOString(),
           sequence: Math.floor(now / 1000),
         });
+      if (req.method === "GET" && path === "/incidents")
+        return send(200, listIncidents(now, url.searchParams));
+      if (req.method === "GET" && path.startsWith("/incidents/")) {
+        const [id, extra] = path.slice(11).split("/");
+        const found =
+          extra === "report-draft"
+            ? incidentDraft(now, decodeURIComponent(id))
+            : extra === undefined
+              ? getIncident(now, decodeURIComponent(id))
+              : undefined;
+        return found
+          ? send(200, found)
+          : send(404, { message: "사건을 찾을 수 없습니다." });
+      }
       if (req.method === "GET" && path === "/trend") {
         const sensor = hierarchy.equipment
           .flatMap((e) => e.tags)

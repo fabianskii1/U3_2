@@ -2,7 +2,7 @@
 
 ## 목표와 기준 자료
 
-`plan/incidents/`의 CSV 3개로 "알람 → 사건 → 원인 진단"을 DB에서 추적할 수 있게 한다. 모두 임시(합성) 데이터다.
+`plan/incidents/data/`의 CSV 3개로 "알람 → 사건 → 원인 진단"을 DB에서 추적할 수 있게 한다. 모두 임시(합성) 데이터다.
 
 | 파일 | 행 | 내용 | DB 반영 |
 | --- | --- | --- | --- |
@@ -89,7 +89,7 @@
 
 ## 적재 스크립트 `BE/scripts/import_incident_fixture.py`
 
-- 인자: `--data ../plan/incidents`. 기본 실행은 검증과 변경 예정 내역(diff) 출력만 하고, `--apply`를 붙여야 커밋한다. `import_cdu_alarm_fixture`와 같은 패턴이다.
+- 인자: `--data ../plan/incidents/data`. 기본 실행은 검증과 변경 예정 내역(diff) 출력만 하고, `--apply`를 붙여야 커밋한다. `import_cdu_alarm_fixture`와 같은 패턴이다.
 - 순서(한 트랜잭션): `error_type` 시드 → `incident` → `incident_candidate` → `alarm` 갱신(`source_alarm_id` 기준; 시각, `cof_score`, `peak_level`, `incident_id`)
 - 검증: 위 "정리 후 검증 결과"의 항목을 그대로 코드로 확인한다. 하나라도 어긋나면 전체를 롤백한다. 알람 CSV에 DB에 없는 ID가 있거나 DB 알람이 CSV에 없으면 중단한다.
 - `alarm_intake`에 저장된 응답 스냅샷이 갱신 대상 알람을 참조하면 경고를 출력한다(스냅샷은 수정하지 않는다).
@@ -107,8 +107,8 @@
 
 ```sh
 uv run alembic upgrade head
-uv run python -m scripts.import_incident_fixture --data ../plan/incidents          # 검증 + 변경 내역(롤백)
-uv run python -m scripts.import_incident_fixture --data ../plan/incidents --apply  # 커밋
+uv run python -m scripts.import_incident_fixture --data ../plan/incidents/data          # 검증 + 변경 내역(롤백)
+uv run python -m scripts.import_incident_fixture --data ../plan/incidents/data --apply  # 커밋
 ```
 
 ## 검증 기준

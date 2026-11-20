@@ -2,6 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { z } from "zod";
 import { http } from "../../../shared/api/http-client.ts";
 import { beTrend, remoteApi } from "../../../shared/api/be-adapter.ts";
+import { trendIncidentSchema } from "../../../shared/api/contracts/incident.ts";
 import {
   MAX_TREND_POINTS,
   pointCount,
@@ -29,6 +30,7 @@ const schema = z.object({
       }),
     )
     .default([]),
+  incidents: z.array(trendIncidentSchema).default([]),
 });
 export const trendQuery = (
   sensorId: string,
@@ -67,6 +69,7 @@ export const trendQuery = (
         ),
         points: raw.points,
         setpoints: raw.setpoints,
+        incidents: raw.incidents,
       });
     },
     enabled:
