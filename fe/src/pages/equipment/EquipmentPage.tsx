@@ -11,7 +11,10 @@ import {
   hasConsoleTimeline,
 } from "../../features/equipment/model/equipment-alarm-state.ts";
 import { Card } from "../../shared/ui/card.tsx";
-import { IncidentPanel } from "../../features/incidents/index.ts";
+import {
+  DiagnosisPanel,
+  type FaultSelection,
+} from "../../features/incidents/index.ts";
 
 const Pump3D = lazy(() =>
   import("../../features/equipment/ui/Pump3D.tsx").then((module) => ({
@@ -32,6 +35,9 @@ export function EquipmentPage({
 }) {
   const [replayHour, setReplayHour] = useState<number | null>(
     CONSOLE_EXAMPLE_HOUR,
+  );
+  const [faultSelection, setFaultSelection] = useState<FaultSelection | null>(
+    null,
   );
   const unit = hierarchy.units.find((u) => u.id === selection.unitId);
   const equipment = unit
@@ -90,22 +96,20 @@ export function EquipmentPage({
             equipment={selectedEquipment}
             alarms={alarms}
             replayHour={activeReplayHour}
+            faultSelection={faultSelection}
           />
         </Suspense>
       )}
       {selection.equipmentId && (
-        <IncidentPanel
-          title="이상 사건"
-          description="선택한 설비의 최근 사건 · 진단은 추정"
-          filters={{
-            equipment_id: selection.equipmentId,
-            as_of:
-              activeReplayHour == null
-                ? undefined
-                : consoleHourDate(activeReplayHour).toISOString(),
-          }}
-          emptyText="이 설비에 기록된 이상 사건이 없습니다."
-          moreHref={`/incidents?equip_id=${encodeURIComponent(selection.equipmentId)}`}
+        <DiagnosisPanel
+          equipmentId={selection.equipmentId}
+          asOf={
+            activeReplayHour == null
+              ? undefined
+              : consoleHourDate(activeReplayHour).toISOString()
+          }
+          selection={faultSelection}
+          onSelect={setFaultSelection}
         />
       )}
     </div>

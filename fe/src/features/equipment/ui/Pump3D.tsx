@@ -7,6 +7,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { Equipment } from "../../../shared/api/contracts/hierarchy.ts";
 import type { Alarm } from "../../../shared/api/contracts/alarm.ts";
 import { incidentsQuery } from "../../incidents/api/incidents.queries.ts";
+import type { FaultSelection } from "../../incidents/ui/DiagnosisPanel.tsx";
 import { Card, CardHeader } from "../../../shared/ui/card.tsx";
 import { faultParts, pumpParts } from "./pump3d.config.ts";
 import {
@@ -24,14 +25,21 @@ type PartMesh = {
 type Viewer = {
   groups: Record<string, PartMesh[]>;
   update: (
-    red: string[],
-    amber: string[],
+    parts: string[],
+    level: number,
     pulse: boolean,
     mode: ViewMode,
   ) => void;
 };
 
 const MODEL_URL = `${import.meta.env.BASE_URL}models/cdu_pump_skid_etanorm_125-100-315.glb`;
+const PART_LEVEL_COLORS = [
+  0x2f9e6b, // 정상
+  0xd9a400, // 주의
+  0xe8730c, // 경고
+  0xd63a3a, // 위험
+  0x8f1d1d, // 비상
+] as const;
 
 function normalize(value: string) {
   return value.replace(/\s/g, "_").replace(/[\[\].:/]/g, "");
@@ -48,20 +56,20 @@ function partFor(mesh: THREE.Object3D): string | undefined {
 }
 
 function PumpModel({
-  red,
-  amber,
+  parts,
+  level,
   pulse,
   mode,
 }: {
-  red: string[];
-  amber: string[];
+  parts: string[];
+  level: number;
   pulse: boolean;
   mode: ViewMode;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const viewer = useRef<Viewer | null>(null);
-  const currentView = useRef({ red, amber, pulse, mode });
-  currentView.current = { red, amber, pulse, mode };
+  const currentView = useRef({ parts, level, pulse, mode });
+  currentView.current = { parts, level, pulse, mode };
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -105,6 +113,7 @@ function PumpModel({
     let frame = 0;
     let disposed = false;
     let hot: PartMesh[] = [];
+    const hotColor = new THREE.Color();
     let blink = false;
     let lastFocus = "";
     let homePosition = camera.position.clone();
@@ -128,7 +137,8 @@ function PumpModel({
       const strength = blink
         ? 0.12 + 0.35 * (0.5 + 0.5 * Math.sin(time / 260))
         : 0.12;
-      for (const part of hot) part.material.emissive.setRGB(strength, 0, 0);
+      for (const part of hot)
+        part.material.emissive.copy(hotColor).multiplyScalar(strength);
       renderer.render(scene, camera);
     };
     frame = requestAnimationFrame(animate);
@@ -181,39 +191,35 @@ function PumpModel({
         setLoading(false);
         viewer.current = {
           groups,
-          update(nextRed, nextAmber, nextPulse, nextMode) {
-            const redSet = new Set(nextRed),
-              amberSet = new Set(nextAmber);
-            const hasHot = redSet.size + amberSet.size > 0;
+          update(nextParts, nextLevel, nextPulse, nextMode) {
+            const selected = new Set(nextParts);
+            const hasHot = selected.size > 0;
+            hotColor.setHex(
+              PART_LEVEL_COLORS[
+                Math.min(4, Math.max(0, Math.trunc(nextLevel)))
+              ],
+            );
             hot = [];
             blink = nextPulse;
             for (const [part, meshes] of Object.entries(groups)) {
-              const isRed = redSet.has(part),
-                isAmber = !isRed && amberSet.has(part);
+              const isSelected = selected.has(part);
               for (const item of meshes) {
-                item.material.color.copy(
-                  isRed
-                    ? new THREE.Color(0xe53b35)
-                    : isAmber
-                      ? new THREE.Color(0xf59e00)
-                      : item.base,
-                );
+                item.material.color.copy(isSelected ? hotColor : item.base);
                 item.material.emissive.set(0);
                 item.mesh.visible =
-                  nextMode !== "only" || !hasHot || isRed || isAmber;
-                const ghost =
-                  nextMode === "ghost" && hasHot && !isRed && !isAmber;
+                  nextMode !== "only" || !hasHot || isSelected;
+                const ghost = nextMode === "ghost" && hasHot && !isSelected;
                 item.material.transparent = ghost;
                 item.material.opacity = ghost ? 0.12 : 1;
                 item.material.depthWrite = !ghost;
-                if (isRed) hot.push(item);
+                if (isSelected) hot.push(item);
               }
             }
-            const focusKey = `${nextMode}|${[...redSet].sort().join(",")}|${[...amberSet].sort().join(",")}`;
+            const focusKey = `${nextMode}|${[...selected].sort().join(",")}`;
             if (focusKey !== lastFocus) {
               lastFocus = focusKey;
               const focused = Object.entries(groups)
-                .filter(([part]) => redSet.has(part) || amberSet.has(part))
+                .filter(([part]) => selected.has(part))
                 .flatMap(([, meshes]) => meshes);
               if (nextMode === "all" || !focused.length) {
                 camera.position.copy(homePosition);
@@ -247,8 +253,8 @@ function PumpModel({
         };
         const latest = currentView.current;
         viewer.current.update(
-          latest.red,
-          latest.amber,
+          latest.parts,
+          latest.level,
           latest.pulse,
           latest.mode,
         );
@@ -284,8 +290,8 @@ function PumpModel({
   }, []);
 
   useEffect(() => {
-    viewer.current?.update(red, amber, pulse, mode);
-  }, [red, amber, pulse, mode]);
+    viewer.current?.update(parts, level, pulse, mode);
+  }, [parts, level, pulse, mode]);
   return (
     <div className="pump-3d-canvas" ref={container}>
       {error ? (
@@ -297,22 +303,16 @@ function PumpModel({
   );
 }
 
-function sensorPart(signal: string, name: string): string | null {
-  const text = `${signal} ${name}`.toLowerCase();
-  if (/pt.?101|흡입압|suction.pressure|\bps\b/.test(text)) return "pt101";
-  if (/pt.?102|토출압|discharge.pressure|\bpd\b/.test(text)) return "pt102";
-  if (/tt.?101|유체.?온도|fluid.temperature|\btf\b/.test(text)) return "tt101";
-  return null;
-}
-
 export function Pump3D({
   equipment,
   alarms,
   replayHour,
+  faultSelection,
 }: {
   equipment: Equipment;
   alarms: Alarm[];
   replayHour?: number | null;
+  faultSelection?: FaultSelection | null;
 }) {
   const [mode, setMode] = useState<ViewMode>("all");
   const incidentQuery = useQuery(
@@ -327,38 +327,17 @@ export function Pump3D({
   );
   const incident =
     incidentQuery.data?.items.find((item) => item.status === "ongoing") ?? null;
+  const selectedFault =
+    faultSelection &&
+    incident &&
+    faultSelection.incidentId === incident.incident_id
+      ? faultSelection.fault
+      : incident?.diagnosis;
   const status = equipmentAlarmState(equipment, alarms, replayHour);
-  const diagnosisParts = faultParts[incident?.diagnosis ?? ""] ?? [];
-  const riskParts =
-    incident && incident.top_risk_fault !== incident.diagnosis
-      ? (faultParts[incident.top_risk_fault] ?? [])
-      : [];
-  const sensorHighlights = equipment.tags
-    .map((tag) => ({
-      part: sensorPart(tag.signal, tag.name),
-      level: status.sensorLevels.get(tag.id) ?? 0,
-      name: tag.name,
-    }))
-    .filter((entry) => entry.part !== null && entry.level > 0);
-  const red = [
-    ...new Set([
-      ...diagnosisParts,
-      ...sensorHighlights
-        .filter((item) => item.level >= 2)
-        .map((item) => item.part!),
-    ]),
-  ];
-  const amber = [
-    ...new Set([
-      ...riskParts,
-      ...sensorHighlights
-        .filter((item) => item.level === 1)
-        .map((item) => item.part!),
-    ]),
-  ].filter((part) => !red.includes(part));
-  const partNames = (parts: string[], color: "red" | "amber") =>
+  const selectedParts = faultParts[selectedFault ?? ""] ?? [];
+  const partNames = (parts: string[]) =>
     parts.map((part) => (
-      <span className={`pump-3d-part ${color}`} key={part}>
+      <span className="pump-3d-part" data-level={status.level} key={part}>
         {pumpParts[part]?.name ?? part}
       </span>
     ));
@@ -367,7 +346,7 @@ export function Pump3D({
     <Card className="pump-3d-panel">
       <CardHeader
         title={`${equipment.id} 3D 부품`}
-        description="고장 관련 부품과 센서 알람 위치를 표시합니다. 드래그로 회전하고 스크롤로 확대할 수 있습니다."
+        description="선택한 고장 유형의 부품을 강조합니다. 드래그로 회전하고 스크롤로 확대할 수 있습니다."
         action={
           <div
             className="pump-3d-modes"
@@ -396,9 +375,9 @@ export function Pump3D({
       />
       <div className="pump-3d-layout">
         <PumpModel
-          red={red}
-          amber={amber}
-          pulse={red.length > 0 && status.level >= 2}
+          parts={selectedParts}
+          level={status.level}
+          pulse={selectedParts.length > 0 && status.level >= 2}
           mode={mode}
         />
         <div className="pump-3d-info">
@@ -416,31 +395,19 @@ export function Pump3D({
           ) : incident ? (
             <>
               <p>
-                <strong>판별: {incident.diagnosis}</strong>
+                <strong>선택한 고장: {selectedFault}</strong>
               </p>
-              {diagnosisParts.length ? (
-                <div className="pump-3d-parts">
-                  {partNames(diagnosisParts, "red")}
-                </div>
+              {selectedFault !== incident.diagnosis && (
+                <p className="muted small">
+                  판별 (확률 1위): {incident.diagnosis}
+                </p>
+              )}
+              {selectedParts.length ? (
+                <div className="pump-3d-parts">{partNames(selectedParts)}</div>
               ) : (
                 <p className="muted small">
                   모델에서 대응하는 부품이 없습니다.
                 </p>
-              )}
-              {riskParts.length > 0 && (
-                <>
-                  <p className="muted small">
-                    위험 1위: {incident.top_risk_fault}
-                  </p>
-                  <div className="pump-3d-parts">
-                    {partNames(
-                      riskParts.filter(
-                        (part) => !diagnosisParts.includes(part),
-                      ),
-                      "amber",
-                    )}
-                  </div>
-                </>
               )}
               <p className="muted small">
                 이상 시작{" "}
@@ -450,24 +417,9 @@ export function Pump3D({
           ) : (
             <p className="muted small">진행 중인 이상 사건이 없습니다.</p>
           )}
-          {sensorHighlights.length > 0 && (
-            <>
-              <p className="muted small">센서 알람 위치</p>
-              <div className="pump-3d-parts">
-                {sensorHighlights.map((item, index) => (
-                  <span
-                    key={`${item.part}-${index}`}
-                    className={`pump-3d-part ${item.level >= 2 ? "red" : "amber"}`}
-                  >
-                    {item.name} · {pumpParts[item.part!]?.name}
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
-          {mode !== "all" && red.length === 0 && amber.length === 0 && (
+          {mode !== "all" && selectedParts.length === 0 && (
             <p className="muted small">
-              강조할 부품이 없어 전체 모델을 보여줍니다.
+              표시할 고장 부품이 없어 전체 모델을 보여줍니다.
             </p>
           )}
           <p className="muted small">

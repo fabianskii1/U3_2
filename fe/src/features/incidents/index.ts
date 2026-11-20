@@ -15,3 +15,4 @@ export {
 } from "./model/incident.ts";
 export { IncidentRow } from "./ui/IncidentCard.tsx";
 export { IncidentPanel } from "./ui/IncidentPanel.tsx";
+export { DiagnosisPanel, type FaultSelection } from "./ui/DiagnosisPanel.tsx";
